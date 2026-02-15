@@ -1,0 +1,1479 @@
+// ==UserScript==
+// @name         Автозаполнение формы опор - v1.7.9 DEBUG
+// @namespace    pillar.autofill.advanced
+// @version      1.7.8
+// @description  💜 Новый подход: поиск всех кнопок без переходов
+// @match        https://moe2.agentumit.ru/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    const STORAGE_KEY = 'pillar_autofill_v1';
+
+    /******************************************************************
+     * ЛОГИРОВАНИЕ
+     ******************************************************************/
+    let logMessages = [];
+    let logPanel = null;
+    let logContent = null;
+
+    function log(message, type = 'info') {
+        const ts = new Date().toLocaleTimeString('ru-RU');
+        logMessages.push({ time: ts, message, type });
+        console.log(`[${ts}] ${message}`);
+        if (logContent) updateLogUI();
+    }
+
+    function updateLogUI() {
+        if (!logContent) return;
+        logContent.innerHTML = logMessages.map(e => {
+            const colors = { success: '#22c55e', error: '#ef4444', warning: '#f59e0b', debug: '#3b82f6', info: '#8b5cf6' };
+            const icons  = { success: '✅', error: '❌', warning: '⚠️', debug: '🔍', info: 'ℹ️' };
+            return `<div style="color:${colors[e.type]||'#8b5cf6'};margin-bottom:4px;font-size:11px;font-family:monospace;">
+                <span style="opacity:0.7;">[${e.time}]</span> ${icons[e.type]||'ℹ️'} ${e.message}
+            </div>`;
+        }).join('');
+        logContent.scrollTop = logContent.scrollHeight;
+    }
+
+    function copyLogs() {
+        const t = document.createElement('textarea');
+        t.value = logMessages.map(e => `[${e.time}] ${e.message}`).join('\n');
+        t.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(t);
+        t.select();
+        try {
+            document.execCommand('copy');
+            showGlobalNotification('✅ Логи скопированы!', 'success');
+        } catch {
+            showGlobalNotification('❌ Ошибка копирования', 'error');
+        }
+        document.body.removeChild(t);
+    }
+
+    function clearLogs() {
+        logMessages = [];
+        if (logContent) logContent.innerHTML = '<div style="color:#666;font-style:italic;">Очищено</div>';
+    }
+
+    function showGlobalNotification(message, type = 'success') {
+        const n = document.createElement('div');
+        n.style.cssText = `position:fixed;top:20px;right:20px;background:${type==='success'?'linear-gradient(135deg,rgba(22,163,74,0.95),rgba(0,0,0,0.95))':type==='error'?'linear-gradient(135deg,rgba(220,38,38,0.95),rgba(0,0,0,0.95))':'linear-gradient(135deg,rgba(234,179,8,0.95),rgba(0,0,0,0.95))'};border:1px solid ${type==='success'?'rgba(34,197,94,0.5)':type==='error'?'rgba(239,68,68,0.5)':'rgba(234,179,8,0.5)'};border-radius:12px;padding:16px 20px;color:#fff;font-size:13px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;z-index:1000001;box-shadow:0 10px 30px rgba(0,0,0,0.5);max-width:300px;`;
+        n.textContent = message;
+        document.body.appendChild(n);
+        setTimeout(() => n.remove(), 3000);
+    }
+
+    /******************************************************************
+     * КОНФИГУРАЦИЯ
+     ******************************************************************/
+    const PILLAR_TYPE_TO_MATERIAL = {
+        'СВ 95': 'железобетонная', 'СВ 110': 'железобетонная', 'СКЦ': 'железобетонная',
+        'Деревяная н/в': 'деревянная', 'ОСЦ-1.5-9.0': 'металлическая', 'Трубостойка': 'металлическая'
+    };
+    const CONSTRUCTION_TYPES = [
+        { name: 'одностоечная', stands: 1 }, { name: 'двухстоечная', stands: 2 },
+        { name: 'трехстоечная', stands: 3 }, { name: 'А-образная', stands: 2 }, { name: 'П-образная', stands: 2 }
+    ];
+    const PLACEMENT_TYPES  = ['Ответвительная', 'Промежуточная', 'Угловая', 'Концевая'];
+    const BRACING_MATS     = ['деревянная', 'металлическая', 'железобетонная'];
+    const ATTACH_MATS      = ['деревянная', 'металлическая'];
+    const LAMP_TYPES       = ['ДНАТ', 'ДРЛ', 'Светодиод', 'Ввод вручную'];
+
+    const defaultData = {
+        pillar: { type: 'СВ 95', constructionType: 'одностоечная', placement: 'Промежуточная', material: 'железобетонная' },
+        stands: { count: 1, material: 'железобетонная' },
+        bracing: { count: 0, material: 'металлическая' },
+        attachments: { count: 0, material: 'деревянная' },
+        additionalLoad: { communicationCabinet: 0, communicationLine: 0, streetLamp: 0, volsMuffle: 0 },
+        lamps: [],
+        ui: { pos: { x: 20, y: 20 }, isCollapsed: false, logsVisible: true, scale: 100, compactMode: false, isVisible: true }
+    };
+
+    let db = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultData;
+    db.additionalLoad = Object.assign({ communicationCabinet: 0, communicationLine: 0, streetLamp: 0, volsMuffle: 0 }, db.additionalLoad || {});
+    db.ui = Object.assign({ pos: { x: 20, y: 20 }, isCollapsed: false, logsVisible: true, scale: 100, compactMode: false, isVisible: true }, db.ui || {});
+    const saveDb = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+
+    /******************************************************************
+     * ПРОВЕРКА ТИПА ФОРМЫ
+     ******************************************************************/
+    function isPillarForm() {
+        return !!(
+            document.querySelector('fieldset[name="pillarType"]') &&
+            document.querySelector('input[name="constructionType"]') &&
+            document.querySelector('input[name="placement"]')
+        );
+    }
+
+    /******************************************************************
+     * УТИЛИТЫ
+     ******************************************************************/
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    function setReactInput(input, value) {
+        if (!input) return false;
+        try {
+            Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(input, value);
+            input.dispatchEvent(new Event('input',  { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        } catch (e) { log(`setReactInput ошибка: ${e.message}`, 'error'); return false; }
+    }
+
+    async function waitForField(selector, timeout = 6000) {
+        const t0 = Date.now();
+        let el = document.querySelector(selector);
+        while (!el && Date.now() - t0 < timeout) {
+            await sleep(150);
+            el = document.querySelector(selector);
+        }
+        return el || null;
+    }
+
+    async function fillField(selector, value, label) {
+        const el = await waitForField(selector, 5000);
+        if (!el) { log(`${label}: не найдено`, 'warning'); return false; }
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await sleep(100);
+        if ((el.value || '') === value) { log(`${label}: уже "${value}" ✓`, 'debug'); return true; }
+        for (let i = 0; i < 5; i++) {
+            setReactInput(el, value);
+            await sleep(200);
+            if ((el.value || '') === value) { log(`${label}: "${value}" ✓`, 'success'); return true; }
+            await sleep(150);
+        }
+        log(`${label}: не удалось установить "${value}"`, 'error');
+        return false;
+    }
+
+    async function clickReactSelect(selector, value) {
+        const sel = document.querySelector(selector);
+        if (!sel) return false;
+        ['mousedown', 'mouseup', 'click'].forEach(t =>
+            sel.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))
+        );
+        await sleep(300);
+        for (let i = 0; i < 40; i++) {
+            const opt = [...document.querySelectorAll('.smwb-menu__item')].find(o => o.textContent.trim() === value);
+            if (opt) {
+                ['mousedown', 'mouseup', 'click'].forEach(t =>
+                    opt.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))
+                );
+                await sleep(200);
+                return true;
+            }
+            await sleep(100);
+        }
+        return false;
+    }
+
+    async function clickCamera(selector) {
+        const btn = document.querySelector(selector);
+        if (!btn) { log(`Камера не найдена: ${selector}`, 'warning'); return false; }
+        const fs = btn.closest('fieldset');
+        if (fs) {
+            fs.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await sleep(150);
+            const hasPhoto = [...fs.querySelectorAll('img')].some(img => {
+                const src = img.src || '';
+                return (src.startsWith('https://') || src.startsWith('blob:') || src.startsWith('data:image'))
+                    && !src.includes('iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB')
+                    && img.width > 10;
+            });
+            if (hasPhoto) { log(`Фото уже есть ✓`, 'debug'); return true; }
+        }
+        ['mousedown', 'mouseup', 'click'].forEach(t =>
+            btn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))
+        );
+        await sleep(100);
+        return true;
+    }
+
+    async function setCounter(selector, target) {
+        const inp = await waitForField(selector, 4000);
+        if (!inp) { log(`Счётчик не найден: ${selector}`, 'error'); return false; }
+        const cont = inp.closest('.zC3boZPYpGZ1oTnRKpH9') || inp.closest('.MUUhtVW6OxD9dYFURbyO') || inp.parentElement;
+        const plus  = cont.querySelector('button.tKCNx3Mjilgu1eJFpBSs');
+        const minus = cont.querySelector('button.bfwPpp5XjJbr4xH4oW1r');
+        if (!plus || !minus) { log(`Кнопки +/- не найдены`, 'error'); return false; }
+        const get = () => parseInt(inp.value) || 0;
+        log(`Счётчик: ${get()} → ${target}`, 'info');
+        let retries = 0;
+        while (get() < target && retries < 15) {
+            const b = get(); plus.click(); await sleep(300);
+            if (get() === b) { retries++; await sleep(300); } else retries = 0;
+        }
+        while (get() > target) { minus.click(); await sleep(500); }
+        const ok = get() === target;
+        log(`Счётчик: ${ok ? '✓' : '✗'} (${get()})`, ok ? 'success' : 'error');
+        return ok;
+    }
+
+    /******************************************************************
+     * КАРУСЕЛЬ
+     ******************************************************************/
+    function getCarouselIndex() {
+        const dots = document.querySelectorAll('.smwb-carousel__navigation__dot');
+        for (let i = 0; i < dots.length; i++) {
+            if (dots[i].classList.contains('current')) return i;
+        }
+        return 0;
+    }
+
+    async function goToSlide(target, maxTries = 5) {
+        log(`🔄 Слайд → ${target}`, 'info');
+        for (let try_ = 1; try_ <= maxTries; try_++) {
+            const cur = getCarouselIndex();
+            if (cur === target) { log(`Слайд ${target} ✓`, 'success'); return true; }
+            const diff = target - cur;
+            const next = document.querySelector('.smwb-carousel__navigation__button--next');
+            const prev = document.querySelector('.smwb-carousel__navigation__button--prev');
+            const btn  = diff > 0 ? next : prev;
+            if (btn) {
+                for (let c = 0; c < Math.abs(diff); c++) { btn.click(); await sleep(350); }
+                if (getCarouselIndex() === target) { log(`Слайд ${target} ✓`, 'success'); return true; }
+            }
+            const dots = document.querySelectorAll('.smwb-carousel__navigation__dot');
+            if (target < dots.length) {
+                const d = dots[target], db2 = d.querySelector('button') || d;
+                ['mousedown', 'mouseup', 'click'].forEach(t =>
+                    db2.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))
+                );
+                await sleep(500);
+                if (getCarouselIndex() === target) { log(`Слайд ${target} ✓`, 'success'); return true; }
+            }
+            await sleep(300);
+        }
+        log(`Не удалось попасть на слайд ${target}`, 'error');
+        return false;
+    }
+
+    /******************************************************************
+     * НАГРУЗКИ
+     ******************************************************************/
+    function buildDesiredLoads() {
+        const list = [];
+        for (let i = 0; i < db.additionalLoad.communicationCabinet; i++)
+            list.push({ type: 'шкаф коммутационный', owner: 'ПАО Россети' });
+        for (let i = 0; i < db.additionalLoad.communicationLine; i++)
+            list.push({ type: 'линия связи', lineType: 'ВОЛС' });
+        for (let i = 0; i < db.additionalLoad.streetLamp; i++) {
+            const lamp = db.lamps[i] || { type: 'ДНАТ', customType: '', mounting: 'приставной', powerSupply: 'Кабель', direction: 'перпендикулярно линии' };
+            list.push({ type: 'фонарь уличный', lamp });
+        }
+        for (let i = 0; i < db.additionalLoad.volsMuffle; i++)
+            list.push({ type: 'муфта ВОЛС' });
+        return list;
+    }
+
+    /**
+     * Удаление нагрузки через кнопку delete на слайде
+     */
+    async function deleteLoadViaPlusButton(index) {
+        try {
+            log(`🗑️ [${index}] Начало удаления...`, 'info');
+
+            // Переходим на слайд нагрузки (index + 1 потому что 0 = общий слайд)
+            const slideIndex = index + 1;
+            log(`  → Переход на слайд ${slideIndex}`, 'debug');
+
+            const slideOk = await goToSlide(slideIndex);
+            if (!slideOk) {
+                log(`  ❌ Не удалось перейти на слайд`, 'error');
+                return false;
+            }
+            await sleep(600);
+
+            // Ищем кнопку "Удалить номер X"
+            log(`  → Поиск кнопки "Удалить"...`, 'debug');
+            const deleteBtn = [...document.querySelectorAll('button.smwb-button')]
+                .find(btn => {
+                    const text = btn.textContent || '';
+                    const hasDeleteText = text.includes('Удалить номер');
+                    const icon = btn.querySelector('.material-symbols-outlined');
+                    const hasDeleteIcon = icon && icon.textContent.trim() === 'delete';
+                    return hasDeleteText && hasDeleteIcon;
+                });
+
+            if (!deleteBtn) {
+                log(`  ❌ Кнопка "Удалить" не найдена`, 'error');
+                return false;
+            }
+
+            log(`  → Клик по кнопке "Удалить"`, 'debug');
+            deleteBtn.click();
+            await sleep(600);
+
+            // Ждём модальное окно
+            log(`  → Ожидание модального окна...`, 'debug');
+
+            for (let attempt = 0; attempt < 30; attempt++) {
+                const modal = document.querySelector('.smwb-modal');
+
+                if (modal) {
+                    const modalText = modal.textContent || '';
+
+                    if (modalText.includes('Удалить элемент')) {
+                        log(`  → Модальное окно найдено`, 'debug');
+
+                        // Ищем кнопку "Да" с иконкой delete
+                        const buttons = [...modal.querySelectorAll('button.smwb-button')];
+
+                        const confirmBtn = buttons.find(btn => {
+                            const text = btn.textContent || '';
+                            const hasYes = text.includes('Да');
+                            const icon = btn.querySelector('.material-symbols-outlined');
+                            const hasDeleteIcon = icon && icon.textContent.trim() === 'delete';
+                            return hasYes && hasDeleteIcon;
+                        });
+
+                        if (confirmBtn) {
+                            log(`  → Клик "Да"`, 'debug');
+                            confirmBtn.click();
+                            await sleep(1000);
+                            log(`  ✅ [${index}] Удалено успешно`, 'success');
+                            return true;
+                        }
+                        break;
+                    }
+                }
+
+                await sleep(100);
+            }
+
+            log(`  ❌ Не удалось подтвердить удаление`, 'error');
+            return false;
+
+        } catch (error) {
+            log(`  ❌ Ошибка удаления [${index}]: ${error.message}`, 'error');
+            return false;
+        }
+    }
+
+    function getLoadCounter() {
+        const inp = document.querySelector('input[name="additionalLoad.count"]');
+        if (!inp) return null;
+        const cont = inp.closest('.zC3boZPYpGZ1oTnRKpH9') || inp.closest('.MUUhtVW6OxD9dYFURbyO') || inp.parentElement;
+        return {
+            input: inp,
+            plus:  cont.querySelector('button.tKCNx3Mjilgu1eJFpBSs'),
+            minus: cont.querySelector('button.bfwPpp5XjJbr4xH4oW1r'),
+            count: () => parseInt(inp.value) || 0
+        };
+    }
+
+    async function fillLoadSimple(loadIndex, loadData) {
+        const { type } = loadData;
+        const typeSelector = `input[name="additionalLoad.info[${loadIndex}].type"]`;
+        let typeInput = document.querySelector(typeSelector);
+
+        if (!typeInput) {
+            log(`Поле [${loadIndex}] не в DOM, навигация...`, 'debug');
+            const dots = document.querySelectorAll('.smwb-carousel__navigation__dot');
+            const slideIdx = loadIndex + 1;
+            if (slideIdx < dots.length) {
+                const dot = dots[slideIdx];
+                const dotBtn = dot.querySelector('button') || dot;
+                ['mousedown', 'mouseup', 'click'].forEach(t =>
+                    dotBtn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))
+                );
+                await sleep(600);
+            }
+            typeInput = await waitForField(typeSelector, 8000);
+        }
+
+        if (!typeInput) {
+            log(`❌ [${loadIndex}] Поле type не найдено`, 'error');
+            return false;
+        }
+
+        // Заполняем тип
+        await fillField(typeSelector, type, `Тип[${loadIndex}]`);
+        await sleep(200);
+
+        // Заполняем специфичные поля в зависимости от типа
+        if (type === 'шкаф коммутационный') {
+            await fillField(
+                `input[name="additionalLoad.info[${loadIndex}].distributionCabinetOwner"]`,
+                loadData.owner || 'ПАО Россети',
+                `Владелец[${loadIndex}]`
+            );
+        } else if (type === 'линия связи') {
+            await fillField(
+                `input[name="additionalLoad.info[${loadIndex}].communicationLineType"]`,
+                loadData.lineType || 'ВОЛС',
+                `Тип линии[${loadIndex}]`
+            );
+        } else if (type === 'фонарь уличный' && loadData.lamp) {
+            const lamp = loadData.lamp;
+            const lt   = lamp.type === 'Ввод вручную' ? lamp.customType : lamp.type;
+            await fillField(`input[name="additionalLoad.info[${loadIndex}].streetLampType"]`, lt, `Лампа[${loadIndex}]`);
+            await sleep(150);
+            await fillField(`input[name="additionalLoad.info[${loadIndex}].streetLampMountType"]`, lamp.mounting, `Крепление[${loadIndex}]`);
+            await sleep(150);
+            await fillField(`input[name="additionalLoad.info[${loadIndex}].streetLampFasteningType"]`, lamp.powerSupply, `Питание[${loadIndex}]`);
+            await sleep(150);
+            await fillField(`input[name="additionalLoad.info[${loadIndex}].streetLampLuminaireDirection"]`, lamp.direction, `Направление[${loadIndex}]`);
+        }
+
+        await sleep(150);
+        await clickCamera(`fieldset[name="additionalLoad.info[${loadIndex}].photoUrls"] button.smwb-fab`);
+
+        log(`✅ Нагрузка [${loadIndex}] "${type}" готова`, 'success');
+        return true;
+    }
+
+    async function syncLoads() {
+        const desired = buildDesiredLoads();
+        const N = desired.length;
+
+        log(`\n${'═'.repeat(50)}`, 'info');
+        log(`СИНХРОНИЗАЦИЯ НАГРУЗОК v1.7.9`, 'info');
+        log(`UI требует: ${N} нагрузок`, 'info');
+        log(`  ├ Шкафы: ${db.additionalLoad.communicationCabinet}`, 'debug');
+        log(`  ├ Линии: ${db.additionalLoad.communicationLine}`, 'debug');
+        log(`  ├ Фонари: ${db.additionalLoad.streetLamp}`, 'debug');
+        log(`  └ Муфты: ${db.additionalLoad.volsMuffle}`, 'debug');
+        if (N > 0) {
+            log(`Порядок:`, 'debug');
+            desired.forEach((d, i) => log(`  [${i}] ${d.type}`, 'debug'));
+        }
+        log(`${'═'.repeat(50)}`, 'info');
+
+        const counter = await (async () => {
+            for (let i = 0; i < 10; i++) {
+                const c = getLoadCounter();
+                if (c && c.plus && c.minus) return c;
+                await sleep(500);
+            }
+            return null;
+        })();
+
+        if (!counter) {
+            log('❌ Счётчик нагрузок не найден!', 'error');
+            return;
+        }
+
+        let siteCount = counter.count();
+        log(`Сайт имеет: ${siteCount} нагрузок`, 'info');
+
+        // ────────────────────────────────────────────────────────
+        // ПРОВЕРЯЕМ: нужно ли полное пересоздание?
+        // ────────────────────────────────────────────────────────
+        let needsRebuild = false;
+
+        if (siteCount !== N) {
+            log(`⚠️ Количество не совпадает (${siteCount} ≠ ${N})`, 'warning');
+            needsRebuild = true;
+        } else if (siteCount > 0) {
+            // Проверяем типы нагрузок
+            log(`🔍 Проверка типов нагрузок...`, 'info');
+            for (let i = 0; i < siteCount; i++) {
+                const typeInput = document.querySelector(`input[name="additionalLoad.info[${i}].type"]`);
+                const siteType = typeInput ? typeInput.value.trim() : '';
+                const desiredType = desired[i] ? desired[i].type : '';
+
+                if (siteType !== desiredType) {
+                    log(`  ⚠️ [${i}] "${siteType}" ≠ "${desiredType}"`, 'warning');
+                    needsRebuild = true;
+                    break;
+                }
+            }
+        }
+
+        // ────────────────────────────────────────────────────────
+        // ПОЛНОЕ ПЕРЕСОЗДАНИЕ ЕСЛИ НУЖНО
+        // ────────────────────────────────────────────────────────
+        if (needsRebuild) {
+            log(`\n🔄 ПОЛНОЕ ПЕРЕСОЗДАНИЕ`, 'warning');
+
+            // Шаг 1: Удаляем ВСЕ нагрузки через кнопки "Удалить номер X"
+            const currentCount = counter.count();
+            if (currentCount > 0) {
+                log(`🗑️ Удаление ${currentCount} нагрузок...`, 'warning');
+                log(`Стратегия: ищем ВСЕ кнопки "Удалить" без переходов по слайдам`, 'info');
+
+                let attempts = 0;
+                const maxAttempts = currentCount * 5;
+
+                while (counter.count() > 0 && attempts < maxAttempts) {
+                    const beforeCount = counter.count();
+                    log(`\n═══ Попытка ${attempts + 1} ═══`, 'info');
+                    log(`  Осталось нагрузок: ${beforeCount}`, 'debug');
+
+                    // Ищем ВСЕ кнопки "Удалить номер X" на странице
+                    const allDeleteButtons = [...document.querySelectorAll('button.smwb-button')]
+                        .filter(btn => {
+                            const text = btn.textContent || '';
+                            const hasDeleteText = text.includes('Удалить номер');
+                            const icon = btn.querySelector('.material-symbols-outlined');
+                            const hasDeleteIcon = icon && icon.textContent.trim() === 'delete';
+                            return hasDeleteText && hasDeleteIcon;
+                        });
+
+                    log(`  → Найдено кнопок "Удалить номер": ${allDeleteButtons.length}`, 'debug');
+
+                    if (allDeleteButtons.length === 0) {
+                        log(`  ❌ Нет кнопок "Удалить номер"`, 'error');
+                        log(`  → Попробуем поискать через скролл...`, 'debug');
+
+                        // Скроллим вниз по секции нагрузок
+                        const loadSection = document.querySelector('fieldset[name="additionalLoad"]');
+                        if (loadSection) {
+                            loadSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            await sleep(800);
+                            log(`  → Проскроллили к секции нагрузок`, 'debug');
+                            attempts++;
+                            continue;
+                        }
+
+                        log(`  ❌ Не нашли секцию нагрузок`, 'error');
+                        attempts++;
+                        await sleep(1000);
+                        continue;
+                    }
+
+                    // Берём ПЕРВУЮ кнопку и кликаем
+                    const firstDeleteBtn = allDeleteButtons[0];
+                    const btnText = firstDeleteBtn.textContent.trim();
+                    log(`  → Клик по "${btnText}"`, 'debug');
+
+                    // Скроллим к кнопке перед кликом
+                    firstDeleteBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    await sleep(300);
+
+                    firstDeleteBtn.click();
+                    await sleep(700);
+
+                    // Ждём модальное окно с подтверждением
+                    log(`  → Ожидание подтверждения...`, 'debug');
+                    let confirmed = false;
+
+                    for (let modalAttempt = 0; modalAttempt < 30; modalAttempt++) {
+                        const modal = document.querySelector('.smwb-modal');
+
+                        if (modal) {
+                            const modalText = modal.textContent || '';
+
+                            if (modalText.includes('Удалить элемент')) {
+                                log(`  → Модальное окно найдено`, 'debug');
+
+                                // Ищем кнопку "Да" с иконкой delete
+                                const buttons = [...modal.querySelectorAll('button.smwb-button')];
+                                const confirmBtn = buttons.find(btn => {
+                                    const text = btn.textContent || '';
+                                    const icon = btn.querySelector('.material-symbols-outlined');
+                                    return text.includes('Да') && icon && icon.textContent.trim() === 'delete';
+                                });
+
+                                if (confirmBtn) {
+                                    log(`  → Клик "Да"`, 'debug');
+                                    confirmBtn.click();
+                                    confirmed = true;
+                                    await sleep(1000);
+                                    break;
+                                }
+                            }
+                        }
+
+                        await sleep(100);
+                    }
+
+                    const afterCount = counter.count();
+
+                    if (confirmed && afterCount < beforeCount) {
+                        log(`  ✅ УДАЛЕНО! ${beforeCount} → ${afterCount}`, 'success');
+                    } else if (confirmed) {
+                        log(`  ⚠️ Подтверждено, но количество не изменилось (${afterCount})`, 'warning');
+                    } else {
+                        log(`  ❌ Не удалось подтвердить удаление`, 'error');
+                    }
+
+                    attempts++;
+                    await sleep(500);
+                }
+
+                const finalCount = counter.count();
+                if (finalCount === 0) {
+                    log(`\n✅ Все нагрузки удалены (${attempts} попыток)`, 'success');
+                } else {
+                    log(`\n❌ НЕ УДАЛОСЬ УДАЛИТЬ ВСЕ! Осталось: ${finalCount}`, 'error');
+                    log(`Попробуйте удалить оставшиеся вручную`, 'error');
+                    showGlobalNotification(`⚠️ Осталось ${finalCount} нагрузок. Удалите вручную!`, 'error');
+                    return;
+                }
+            }
+
+            // Шаг 2: Создаём нужное количество
+            if (N > 0) {
+                log(`\n➕ Создание ${N} нагрузок...`, 'info');
+                for (let i = 0; i < N; i++) {
+                    const before = counter.count();
+                    counter.plus.click();
+                    await sleep(700);
+                    const after = counter.count();
+                    log(`  Создано [${i}]: ${before} → ${after}`, after === before + 1 ? 'debug' : 'warning');
+                }
+
+                siteCount = counter.count();
+                log(`✅ Создано нагрузок: ${siteCount}/${N}`, siteCount === N ? 'success' : 'warning');
+
+                if (siteCount !== N) {
+                    log(`⚠️ Количество не совпадает после создания!`, 'error');
+                    showGlobalNotification(`⚠️ Создано ${siteCount} из ${N}`, 'warning');
+                }
+            }
+        } else {
+            log(`✓ Количество и типы совпадают`, 'success');
+        }
+
+        // ────────────────────────────────────────────────────────
+        // ЗАПОЛНЕНИЕ НАГРУЗОК
+        // ────────────────────────────────────────────────────────
+        if (N === 0) {
+            log(`✅ Нагрузок нет`, 'success');
+        } else {
+            log(`\n${'─'.repeat(40)}`, 'info');
+            log(`ЗАПОЛНЕНИЕ ${N} НАГРУЗОК`, 'info');
+            log(`${'─'.repeat(40)}`, 'info');
+
+            for (let i = 0; i < N; i++) {
+                log(`\n[${i + 1}/${N}] ${desired[i].type}`, 'info');
+                const ok = await fillLoadSimple(i, desired[i]);
+                if (!ok) log(`  ⚠️ [${i}] не заполнена полностью`, 'warning');
+                await sleep(200);
+            }
+        }
+
+        log(`\n${'═'.repeat(50)}`, 'info');
+        const finalSiteCount = counter.count();
+        log(`ИТОГ: ${finalSiteCount}/${N}`, finalSiteCount === N ? 'success' : 'warning');
+        log(`${'═'.repeat(50)}`, 'info');
+    }
+
+    /******************************************************************
+     * АВТОЗАГРУЗКА С ФОРМЫ (С АВТООБНОВЛЕНИЕМ UI!)
+     ******************************************************************/
+    let uiUpdateCallback = null;
+
+    async function loadFromForm() {
+        try {
+            let changed = false;
+
+            const pillarEl = document.querySelector('fieldset[name="pillarType"] .smwb-select-field__values');
+            if (pillarEl) {
+                const t = pillarEl.textContent.trim();
+                if (t && PILLAR_TYPE_TO_MATERIAL[t] && db.pillar.type !== t) {
+                    db.pillar.type = t;
+                    db.pillar.material = PILLAR_TYPE_TO_MATERIAL[t];
+                    db.stands.material = db.pillar.material;
+                    changed = true;
+                    log(`↓ Тип опоры: ${t}`, 'debug');
+                }
+            }
+
+            const pairs = [
+                ['input[name="constructionType"]', (v) => { db.pillar.constructionType = v; log(`↓ Конструктив: ${v}`, 'debug'); }],
+                ['input[name="placement"]',        (v) => { db.pillar.placement = v; log(`↓ Местоположение: ${v}`, 'debug'); }],
+                ['input[name="material"]',         (v) => { db.pillar.material = v; db.stands.material = v; log(`↓ Материал: ${v}`, 'debug'); }]
+            ];
+            for (const [sel, setter] of pairs) {
+                const el = document.querySelector(sel);
+                if (el?.value) { setter(el.value); changed = true; }
+            }
+
+            const sc = document.querySelector('input[name="stand.count"]');
+            if (sc) {
+                const v = parseInt(sc.value)||0;
+                if (db.stands.count !== v) {
+                    db.stands.count = v;
+                    changed = true;
+                    log(`↓ Стоек: ${v}`, 'debug');
+                }
+            }
+
+            const bc = document.querySelector('input[name="bracing.count"]');
+            if (bc) {
+                const v = parseInt(bc.value)||0;
+                if (db.bracing.count !== v) {
+                    db.bracing.count = v;
+                    changed = true;
+                    log(`↓ Укосов: ${v}`, 'debug');
+                }
+            }
+
+            // НАГРУЗКИ: автоматически добавляем из формы в UI
+            const loadCounter = getLoadCounter();
+            if (loadCounter) {
+                const siteLoadCount = loadCounter.count();
+                const siteCabinets = [], siteCommLines = [], siteLamps = [], siteMuffles = [];
+
+                for (let i = 0; i < siteLoadCount; i++) {
+                    const typeInput = document.querySelector(`input[name="additionalLoad.info[${i}].type"]`);
+                    if (!typeInput) continue;
+                    const typeValue = typeInput.value.trim();
+                    if (typeValue === 'шкаф коммутационный') siteCabinets.push(i);
+                    else if (typeValue === 'линия связи') siteCommLines.push(i);
+                    else if (typeValue === 'фонарь уличный') siteLamps.push(i);
+                    else if (typeValue === 'муфта ВОЛС') siteMuffles.push(i);
+                }
+
+                const newCab = siteCabinets.length, newComm = siteCommLines.length;
+                const newLamp = siteLamps.length, newMuffle = siteMuffles.length;
+
+                if (db.additionalLoad.communicationCabinet !== newCab ||
+                    db.additionalLoad.communicationLine !== newComm ||
+                    db.additionalLoad.streetLamp !== newLamp ||
+                    db.additionalLoad.volsMuffle !== newMuffle) {
+
+                    log(`🔄 АВТОЗАГРУЗКА НАГРУЗОК:`, 'info');
+                    log(`  📥 Шкафы: ${newCab}`, newCab > 0 ? 'success' : 'debug');
+                    log(`  📥 Линии: ${newComm}`, newComm > 0 ? 'success' : 'debug');
+                    log(`  📥 Фонари: ${newLamp}`, newLamp > 0 ? 'success' : 'debug');
+                    log(`  📥 Муфты: ${newMuffle}`, newMuffle > 0 ? 'success' : 'debug');
+
+                    db.additionalLoad.communicationCabinet = newCab;
+                    db.additionalLoad.communicationLine = newComm;
+                    db.additionalLoad.streetLamp = newLamp;
+                    db.additionalLoad.volsMuffle = newMuffle;
+
+                    db.lamps = [];
+                    for (let i = 0; i < newLamp; i++) {
+                        db.lamps.push({
+                            type: 'ДНАТ', customType: '', mounting: 'приставной',
+                            powerSupply: 'Кабель', direction: 'перпендикулярно линии'
+                        });
+                    }
+                    changed = true;
+
+                    if (newCab + newComm + newLamp + newMuffle > 0) {
+                        showGlobalNotification(`✅ Загружено нагрузок: ${newCab + newComm + newLamp + newMuffle}`, 'success');
+                    }
+                }
+            }
+
+            if (changed) {
+                saveDb();
+                // ВАЖНО: вызываем коллбэк для обновления UI
+                if (uiUpdateCallback) {
+                    uiUpdateCallback();
+                }
+                log('✅ Автозагрузка → UI обновлён', 'success');
+            }
+        } catch (e) {
+            log(`❌ Ошибка загрузки: ${e.message}`, 'error');
+        }
+    }
+
+    /******************************************************************
+     * НАБЛЮДАТЕЛЬ ЗА ФОРМОЙ
+     ******************************************************************/
+    function startFormObserver() {
+        function checkFormPresence() {
+            const formVisible = isPillarForm();
+            const host = document.getElementById('pillar-ui-host');
+            if (!host) return;
+
+            if (formVisible && !window.pillarUIManuallyHidden) {
+                host.style.display = 'block';
+            } else {
+                host.style.display = 'none';
+            }
+        }
+
+        checkFormPresence();
+        const observer = new MutationObserver(() => checkFormPresence());
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        let formDetected = false;
+        setInterval(async () => {
+            const ok = isPillarForm();
+            if (ok && !formDetected) {
+                formDetected = true;
+                await sleep(800);
+                await loadFromForm();
+            }
+            if (!ok && formDetected) formDetected = false;
+            checkFormPresence();
+        }, 2000);
+    }
+
+    /******************************************************************
+     * UI (SHADOW DOM)
+     ******************************************************************/
+    function initializeUI() {
+        if (window.pillarUIInitialized) return;
+        window.pillarUIInitialized = true;
+
+        const host = document.createElement('div');
+        host.id = 'pillar-ui-host';
+        document.body.appendChild(host);
+        const shadow = host.attachShadow({ mode: 'open' });
+
+        const css = `
+        @keyframes slideIn { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        .root { position: fixed; width: 380px; background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%); border-radius: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; z-index: 1000000; box-shadow: 0 25px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(139,92,246,0.3); color: #fff; overflow: hidden; animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); transform-origin: top left; display: flex; flex-direction: column; max-height: 90vh; }
+        .root.compact { max-height: none; }
+        .header { background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); padding: 14px 16px; cursor: move; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(139,92,246,0.3); user-select: none; }
+        .header-left { display: flex; align-items: center; gap: 10px; }
+        .header-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .header-title { display: flex; flex-direction: column; gap: 2px; }
+        .header-title-main { font-weight: 800; font-size: 16px; background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+        .header-title-sub { font-size: 10px; color: rgba(255,255,255,0.5); letter-spacing: 0.3px; }
+        .header-buttons { display: flex; gap: 6px; align-items: center; }
+        .header-btn { width: 28px; height: 28px; border-radius: 6px; background: rgba(255,255,255,0.1); border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 14px; }
+        .header-btn:hover { background: rgba(139,92,246,0.3); transform: scale(1.05); }
+        .scale-controls { display: flex; gap: 4px; align-items: center; background: rgba(0,0,0,0.3); padding: 4px; border-radius: 6px; }
+        .scale-btn { width: 24px; height: 24px; border-radius: 4px; background: rgba(255,255,255,0.1); border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 14px; font-weight: 700; }
+        .scale-btn:hover { background: rgba(139,92,246,0.3); }
+        .scale-value { font-size: 10px; color: rgba(255,255,255,0.9); min-width: 35px; text-align: center; font-weight: 600; }
+        .collapsed-info { padding: 12px 16px; display: none; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.2); }
+        .collapsed-info.visible { display: flex; }
+        .collapsed-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+        .collapsed-label { color: rgba(255,255,255,0.6); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
+        .collapsed-value { font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 5px; background: rgba(139,92,246,0.2); color: #8b5cf6; border: 1px solid rgba(139,92,246,0.3); }
+        .body { padding: 16px; padding-bottom: 90px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 12px; }
+        .body::-webkit-scrollbar { width: 6px; }
+        .body::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #8b5cf6, #ec4899); border-radius: 3px; }
+        .section { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 14px; }
+        .section-header { font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.9); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .field-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+        .field-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 0.5px; }
+        .field-select { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 10px 12px; color: #fff; font-size: 13px; font-family: inherit; width: 100%; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' d='M6 9L1 4h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; transition: all 0.2s; }
+        .field-select:focus { outline: none; border-color: #8b5cf6; background: rgba(139,92,246,0.1); box-shadow: 0 0 0 3px rgba(139,92,246,0.15); }
+        .field-select option { background: #1e1b4b; }
+        .field-input { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 10px 12px; color: #fff; font-size: 13px; font-family: inherit; width: 100%; transition: all 0.2s; }
+        .field-input:focus { outline: none; border-color: #8b5cf6; background: rgba(139,92,246,0.1); box-shadow: 0 0 0 3px rgba(139,92,246,0.15); }
+        .number-control { display: flex; align-items: center; gap: 8px; }
+        .number-btn { width: 36px; height: 36px; border-radius: 8px; background: rgba(139,92,246,0.2); border: 1px solid rgba(139,92,246,0.3); color: #8b5cf6; cursor: pointer; font-weight: 700; font-size: 18px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
+        .number-btn:hover { background: rgba(139,92,246,0.3); transform: scale(1.05); }
+        .number-display { flex: 1; text-align: center; font-size: 16px; font-weight: 700; color: #8b5cf6; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 8px; }
+        .load-item { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 12px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: space-between; user-select: none; margin-bottom: 8px; }
+        .load-item:hover { background: rgba(139,92,246,0.1); border-color: rgba(139,92,246,0.3); }
+        .load-item.active { background: rgba(139,92,246,0.2); border-color: #8b5cf6; box-shadow: 0 0 0 2px rgba(139,92,246,0.15); }
+        .load-item-left { display: flex; align-items: center; gap: 10px; flex: 1; }
+        .load-checkbox { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-radius: 4px; transition: all 0.2s; }
+        .load-item.active .load-checkbox { background: linear-gradient(135deg, #8b5cf6, #ec4899); border-color: #8b5cf6; position: relative; }
+        .load-item.active .load-checkbox::after { content: '✓'; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 12px; font-weight: 900; }
+        .load-name { flex: 1; font-size: 13px; font-weight: 600; }
+        .load-count { background: rgba(139,92,246,0.3); color: #8b5cf6; border-radius: 6px; padding: 4px 10px; font-weight: 700; font-size: 13px; min-width: 32px; text-align: center; border: 1px solid rgba(139,92,246,0.3); }
+        .info-text { font-size: 10px; color: rgba(255,255,255,0.5); font-style: italic; margin-top: 4px; }
+        .divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(139,92,246,0.3), transparent); margin: 8px 0; }
+        .fixed-buttons { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, #1e1b4b 70%, transparent); padding: 16px; display: grid; grid-template-columns: 1fr; gap: 8px; z-index: 10; border-top: 1px solid rgba(139,92,246,0.3); }
+        .btn { flex: 1; padding: 14px; border: none; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff; box-shadow: 0 4px 12px rgba(139,92,246,0.3); text-transform: uppercase; letter-spacing: 0.5px; }
+        .btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(139,92,246,0.4); }
+        .btn:active:not(:disabled) { transform: translateY(0); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background: rgba(255,255,255,0.1); box-shadow: none; }
+        .btn-secondary:hover { background: rgba(255,255,255,0.15); }
+        .footer { padding: 10px; text-align: center; font-size: 10px; color: rgba(255,255,255,0.4); background: rgba(0,0,0,0.3); }
+        .notification { position: fixed; top: 20px; right: 20px; background: rgba(0,0,0,0.9); border: 1px solid rgba(139,92,246,0.5); border-radius: 12px; padding: 16px 20px; color: #fff; font-size: 13px; z-index: 1000001; animation: slideIn 0.3s ease-out; box-shadow: 0 10px 30px rgba(0,0,0,0.5); max-width: 300px; }
+        .notification.success { border-color: rgba(34,197,94,0.5); background: linear-gradient(135deg, rgba(22,163,74,0.2), rgba(0,0,0,0.9)); }
+        .notification.error { border-color: rgba(239,68,68,0.5); background: linear-gradient(135deg, rgba(220,38,38,0.2), rgba(0,0,0,0.9)); }
+        .notification.warning { border-color: rgba(234,179,8,0.5); background: linear-gradient(135deg, rgba(202,138,4,0.2), rgba(0,0,0,0.9)); }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 1000001; align-items: center; justify-content: center; }
+        .modal-overlay.show { display: flex; }
+        .modal { background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%); border-radius: 16px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 25px 50px rgba(0,0,0,0.9); border: 1px solid rgba(139,92,246,0.3); }
+        .modal-header { background: rgba(0,0,0,0.4); padding: 20px; border-bottom: 1px solid rgba(139,92,246,0.3); font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+        .modal-body { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+        .modal-footer { padding: 20px; border-top: 1px solid rgba(139,92,246,0.3); display: flex; gap: 12px; }
+        .lamp-card { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 16px; }
+        .lamp-header { font-size: 14px; font-weight: 700; color: #8b5cf6; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid rgba(139,92,246,0.3); }
+        .radio-group { display: flex; gap: 10px; }
+        .radio-option { flex: 1; }
+        .radio-input { display: none; }
+        .radio-label { display: block; padding: 8px 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.2s; font-size: 12px; }
+        .radio-input:checked + .radio-label { background: rgba(139,92,246,0.3); border-color: #8b5cf6; color: #8b5cf6; font-weight: 600; }
+        .log-panel { position: fixed; bottom: 20px; right: 20px; width: 500px; max-height: 400px; background: linear-gradient(145deg, #1e1b4b, #312e81); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.8); z-index: 999999; display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(139,92,246,0.3); }
+        .log-panel.hidden { display: none; }
+        .log-header { background: rgba(0,0,0,0.5); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(139,92,246,0.3); }
+        .log-title { font-weight: 700; font-size: 14px; color: #8b5cf6; display: flex; align-items: center; gap: 8px; }
+        .log-buttons { display: flex; gap: 8px; }
+        .log-btn { padding: 6px 12px; background: rgba(139,92,246,0.2); border: 1px solid rgba(139,92,246,0.3); border-radius: 6px; color: #8b5cf6; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .log-btn:hover { background: rgba(139,92,246,0.3); }
+        .log-content { flex: 1; overflow-y: auto; padding: 12px; background: rgba(0,0,0,0.3); }
+        .log-content::-webkit-scrollbar { width: 6px; }
+        .log-content::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.5); border-radius: 3px; }
+        .settings-bar { display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px 12px; gap: 8px; margin-bottom: 8px; }
+        .settings-bar-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.65); text-transform: uppercase; letter-spacing: 0.4px; }
+        .settings-toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+        .settings-toggle-input { opacity: 0; width: 0; height: 0; position: absolute; }
+        .settings-toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.4); border-radius: 11px; transition: all 0.3s; border: 1px solid rgba(255,255,255,0.2); }
+        .settings-toggle-slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: all 0.3s; }
+        .settings-toggle-input:checked + .settings-toggle-slider { background: linear-gradient(135deg, #8b5cf6, #ec4899); border-color: rgba(139,92,246,0.5); }
+        .settings-toggle-input:checked + .settings-toggle-slider:before { transform: translateX(18px); }
+
+        .root.compact .body { overflow-y: visible; padding: 8px; padding-bottom: 74px; gap: 6px; }
+        .root.compact .section { padding: 7px 10px; }
+        .root.compact .section-header { font-size: 12px; margin-bottom: 8px; }
+        .root.compact .field-label { font-size: 10px; }
+        .root.compact .field-input, .root.compact .field-select { padding: 6px 9px; font-size: 12px; }
+        .root.compact .number-btn { width: 30px; height: 30px; }
+        .root.compact .number-display { font-size: 14px; padding: 6px; }
+        .root.compact .load-item { padding: 8px 10px; margin-bottom: 5px; }
+        .root.compact .load-name { font-size: 12px; }
+        .root.compact .load-count { font-size: 11px; padding: 3px 7px; }
+        .root.compact .divider { margin: 3px 0; }
+        .root.compact .fixed-buttons { padding: 10px; gap: 6px; }
+        .root.compact .btn { padding: 10px; font-size: 12px; }
+        `;
+
+        shadow.innerHTML = `
+        <style>${css}</style>
+        <div class="root" id="main">
+            <div class="header" id="dragHandle">
+                <div class="header-left">
+                    <div class="header-icon">🏗️</div>
+                    <div class="header-title">
+                        <div class="header-title-main">Автозаполнение опор</div>
+                        <div class="header-title-sub">v1.7.9 DEBUG | ALT+О скрыть/показать</div>
+                    </div>
+                </div>
+                <div class="header-buttons">
+                    <div class="scale-controls">
+                        <button class="scale-btn" id="btnScaleDown">−</button>
+                        <span class="scale-value" id="scaleValue">100%</span>
+                        <button class="scale-btn" id="btnScaleUp">+</button>
+                    </div>
+                    <button class="header-btn" id="btnSettings">⚙️</button>
+                    <button class="header-btn" id="btnToggleLogs">📋</button>
+                    <button class="header-btn" id="btnMinimize">−</button>
+                </div>
+            </div>
+
+            <div class="collapsed-info" id="collapsedInfo">
+                <div class="collapsed-row">
+                    <span class="collapsed-label">📊 Статус</span>
+                    <span class="collapsed-value">Готов</span>
+                </div>
+            </div>
+
+            <div class="body" id="bodyContent">
+                <div id="settingsPanel" style="display:none;">
+                    <div class="settings-bar">
+                        <span class="settings-bar-label">📐 Компактный режим</span>
+                        <label class="settings-toggle">
+                            <input type="checkbox" class="settings-toggle-input" id="toggleCompact">
+                            <span class="settings-toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-header">🏗️ Опора</div>
+                    <div class="field-group">
+                        <label class="field-label">Марка опоры</label>
+                        <select class="field-select" id="selPillarType"></select>
+                        <div class="info-text">Материал устанавливается автоматически</div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Конструктивный тип</label>
+                        <select class="field-select" id="selConstructionType"></select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Местоположение</label>
+                        <select class="field-select" id="selPlacement"></select>
+                    </div>
+                </div>
+                <div class="section">
+                    <div class="section-header">🔧 Укосы</div>
+                    <div class="field-group">
+                        <label class="field-label">Количество укосов</label>
+                        <div class="number-control">
+                            <button class="number-btn" id="btnBrDown">−</button>
+                            <div class="number-display" id="dispBracing">0</div>
+                            <button class="number-btn" id="btnBrUp">+</button>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Материал укосов</label>
+                        <select class="field-select" id="selBracingMat"></select>
+                    </div>
+                </div>
+                <div class="section">
+                    <div class="section-header">⚡ Дополнительная нагрузка</div>
+                    <div class="info-text" style="margin-bottom:10px;">ЛКМ — добавить | ПКМ — убрать | Автосинхронизация ↕️</div>
+                    <div class="load-item" id="loadCabinet">
+                        <div class="load-item-left"><div class="load-checkbox"></div><div class="load-name">🗄️ Шкаф</div></div>
+                        <div class="load-count">0</div>
+                    </div>
+                    <div class="load-item" id="loadCommLine">
+                        <div class="load-item-left"><div class="load-checkbox"></div><div class="load-name">📡 Линия связи</div></div>
+                        <div class="load-count">0</div>
+                    </div>
+                    <div class="load-item" id="loadStreetLamp">
+                        <div class="load-item-left"><div class="load-checkbox"></div><div class="load-name">💡 Фонарь</div></div>
+                        <div class="load-count">0</div>
+                    </div>
+                    <div class="load-item" id="loadVolsMuffle">
+                        <div class="load-item-left"><div class="load-checkbox"></div><div class="load-name">🔌 Муфта ВОЛС</div></div>
+                        <div class="load-count">0</div>
+                    </div>
+                </div>
+                <div class="divider"></div>
+            </div>
+
+            <div class="fixed-buttons">
+                <button class="btn" id="btnFill">✨ Заполнить форму</button>
+            </div>
+
+            <div class="footer">KAST Team | v1.7.9 DEBUG 💜</div>
+        </div>
+
+        <div class="log-panel hidden" id="logPanel">
+            <div class="log-header">
+                <div class="log-title">📋 Журнал</div>
+                <div class="log-buttons">
+                    <button class="log-btn" id="btnCopyLogs">📋</button>
+                    <button class="log-btn" id="btnClearLogs">🗑️</button>
+                    <button class="log-btn" id="btnCloseLogs">✕</button>
+                </div>
+            </div>
+            <div class="log-content" id="logContent"></div>
+        </div>
+
+        <div class="modal-overlay" id="modalAttach">
+            <div class="modal">
+                <div class="modal-header">🪵 Приставки</div>
+                <div class="modal-body">
+                    <div class="field-group">
+                        <label class="field-label">Количество</label>
+                        <div class="number-control">
+                            <button class="number-btn" id="btnAtDown">−</button>
+                            <div class="number-display" id="dispAttach">0</div>
+                            <button class="number-btn" id="btnAtUp">+</button>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Материал</label>
+                        <select class="field-select" id="selAttachMat"></select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="btnCancelAttach" style="flex:1;">✕ Отмена</button>
+                    <button class="btn" id="btnConfirmAttach" style="flex:1;">✓ Продолжить</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="modalLamps">
+            <div class="modal">
+                <div class="modal-header">💡 Фонари</div>
+                <div class="modal-body" id="lampsConfig"></div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="btnCancelLamps" style="flex:1;">✕ Отмена</button>
+                    <button class="btn" id="btnConfirmLamps" style="flex:1;">✓ Заполнить</button>
+                </div>
+            </div>
+        </div>
+        `;
+
+        const ui = {
+            main: shadow.querySelector('#main'),
+            body: shadow.querySelector('#bodyContent'),
+            collapsedInfo: shadow.querySelector('#collapsedInfo'),
+            btnMin: shadow.querySelector('#btnMinimize'),
+            btnTogLogs: shadow.querySelector('#btnToggleLogs'),
+            btnSettings: shadow.querySelector('#btnSettings'),
+            settingsPanel: shadow.querySelector('#settingsPanel'),
+            toggleCompact: shadow.querySelector('#toggleCompact'),
+            btnScaleDown: shadow.querySelector('#btnScaleDown'),
+            btnScaleUp: shadow.querySelector('#btnScaleUp'),
+            scaleValue: shadow.querySelector('#scaleValue'),
+            selPillar: shadow.querySelector('#selPillarType'),
+            selConstruct: shadow.querySelector('#selConstructionType'),
+            selPlacement: shadow.querySelector('#selPlacement'),
+            dispBracing: shadow.querySelector('#dispBracing'),
+            btnBrUp: shadow.querySelector('#btnBrUp'),
+            btnBrDown: shadow.querySelector('#btnBrDown'),
+            selBracingMat: shadow.querySelector('#selBracingMat'),
+            loadCabinet: shadow.querySelector('#loadCabinet'),
+            loadCommLine: shadow.querySelector('#loadCommLine'),
+            loadStreetLamp: shadow.querySelector('#loadStreetLamp'),
+            loadVolsMuffle: shadow.querySelector('#loadVolsMuffle'),
+            btnFill: shadow.querySelector('#btnFill'),
+            modalAttach: shadow.querySelector('#modalAttach'),
+            dispAttach: shadow.querySelector('#dispAttach'),
+            btnAtUp: shadow.querySelector('#btnAtUp'),
+            btnAtDown: shadow.querySelector('#btnAtDown'),
+            selAttachMat: shadow.querySelector('#selAttachMat'),
+            btnConfAtch: shadow.querySelector('#btnConfirmAttach'),
+            btnCancAtch: shadow.querySelector('#btnCancelAttach'),
+            modalLamps: shadow.querySelector('#modalLamps'),
+            lampsConfig: shadow.querySelector('#lampsConfig'),
+            btnConfLamps: shadow.querySelector('#btnConfirmLamps'),
+            btnCancLamps: shadow.querySelector('#btnCancelLamps'),
+        };
+
+        logPanel  = shadow.querySelector('#logPanel');
+        logContent = shadow.querySelector('#logContent');
+
+        shadow.querySelector('#btnCopyLogs').addEventListener('click', copyLogs);
+        shadow.querySelector('#btnClearLogs').addEventListener('click', () => { clearLogs(); log('Логи очищены', 'info'); });
+        shadow.querySelector('#btnCloseLogs').addEventListener('click', () => { logPanel.classList.add('hidden'); db.ui.logsVisible = false; saveDb(); });
+        ui.btnTogLogs.addEventListener('click', () => {
+            const h = logPanel.classList.contains('hidden');
+            logPanel.classList.toggle('hidden', !h);
+            db.ui.logsVisible = h; saveDb();
+        });
+        if (db.ui.logsVisible === false) logPanel.classList.add('hidden');
+
+        function showNotification(msg, type = 'info') {
+            const n = document.createElement('div');
+            n.className = `notification notification-${type}`;
+            n.textContent = msg;
+            shadow.appendChild(n);
+            setTimeout(() => n.remove(), 3500);
+        }
+
+        const showModal = m => m.classList.add('show');
+        const hideModal = m => m.classList.remove('show');
+
+        function updateScale() {
+            ui.main.style.transform = `scale(${db.ui.scale / 100})`;
+            ui.scaleValue.textContent = `${db.ui.scale}%`;
+        }
+        ui.btnScaleUp.addEventListener('click', () => {
+            if (db.ui.scale < 150) { db.ui.scale += 5; updateScale(); saveDb(); }
+        });
+        ui.btnScaleDown.addEventListener('click', () => {
+            if (db.ui.scale > 60) { db.ui.scale -= 5; updateScale(); saveDb(); }
+        });
+
+        let settingsPanelOpen = false;
+        function updateCompactMode() {
+            ui.main.classList.toggle('compact', db.ui.compactMode);
+            ui.toggleCompact.checked = db.ui.compactMode;
+        }
+        ui.btnSettings.addEventListener('click', () => {
+            settingsPanelOpen = !settingsPanelOpen;
+            ui.settingsPanel.style.display = settingsPanelOpen ? 'block' : 'none';
+            ui.btnSettings.style.background = settingsPanelOpen ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.1)';
+        });
+        ui.toggleCompact.addEventListener('change', (e) => {
+            db.ui.compactMode = e.target.checked;
+            updateCompactMode();
+            saveDb();
+            showNotification(db.ui.compactMode ? '📐 Компактный режим' : '📐 Обычный режим', 'success');
+        });
+
+        function initSelects() {
+            const opts = (el, items) => items.forEach(v => {
+                const o = document.createElement('option');
+                o.value = v; o.textContent = v; el.appendChild(o);
+            });
+            opts(ui.selPillar, ['СВ 95','СВ 110','СКЦ','Деревяная н/в','ОСЦ-1.5-9.0','Трубостойка']);
+            opts(ui.selConstruct, CONSTRUCTION_TYPES.map(c => c.name));
+            opts(ui.selPlacement, PLACEMENT_TYPES);
+            opts(ui.selBracingMat, BRACING_MATS);
+            opts(ui.selAttachMat, ATTACH_MATS);
+        }
+
+        function updateUI() {
+            ui.selPillar.value = db.pillar.type;
+            ui.selConstruct.value = db.pillar.constructionType;
+            ui.selPlacement.value = db.pillar.placement;
+            ui.dispBracing.textContent = db.bracing.count;
+            ui.selBracingMat.value = db.bracing.material;
+
+            const items = [
+                { el: ui.loadCabinet,    key: 'communicationCabinet' },
+                { el: ui.loadCommLine,   key: 'communicationLine' },
+                { el: ui.loadStreetLamp, key: 'streetLamp' },
+                { el: ui.loadVolsMuffle, key: 'volsMuffle' }
+            ];
+            items.forEach(({ el, key }) => {
+                const cnt = db.additionalLoad[key];
+                el.classList.toggle('active', cnt > 0);
+                el.querySelector('.load-count').textContent = cnt;
+            });
+        }
+
+        // ВАЖНО: регистрируем коллбэк для автообновления UI
+        uiUpdateCallback = updateUI;
+
+        ui.selPillar.addEventListener('change', e => {
+            db.pillar.type = e.target.value;
+            db.pillar.material = PILLAR_TYPE_TO_MATERIAL[e.target.value] || 'железобетонная';
+            db.stands.material = db.pillar.material; saveDb(); updateUI();
+        });
+        ui.selConstruct.addEventListener('change', e => {
+            db.pillar.constructionType = e.target.value;
+            const ct = CONSTRUCTION_TYPES.find(c => c.name === e.target.value);
+            if (ct) db.stands.count = ct.stands; saveDb(); updateUI();
+        });
+        ui.selPlacement.addEventListener('change', e => { db.pillar.placement = e.target.value; saveDb(); });
+        ui.btnBrUp.addEventListener('click', () => { db.bracing.count++; saveDb(); updateUI(); });
+        ui.btnBrDown.addEventListener('click', () => { if (db.bracing.count > 0) db.bracing.count--; saveDb(); updateUI(); });
+        ui.selBracingMat.addEventListener('change', e => { db.bracing.material = e.target.value; saveDb(); });
+
+        [
+            { el: ui.loadCabinet,    key: 'communicationCabinet' },
+            { el: ui.loadCommLine,   key: 'communicationLine' },
+            { el: ui.loadStreetLamp, key: 'streetLamp' },
+            { el: ui.loadVolsMuffle, key: 'volsMuffle' }
+        ].forEach(({ el, key }) => {
+            el.addEventListener('click', e => {
+                if (e.button !== 0) return;
+                db.additionalLoad[key]++;
+                if (key === 'streetLamp') db.lamps.push({ type: 'ДНАТ', customType: '', mounting: 'приставной', powerSupply: 'Кабель', direction: 'перпендикулярно линии' });
+                saveDb(); updateUI();
+            });
+            el.addEventListener('contextmenu', e => {
+                e.preventDefault();
+                if (db.additionalLoad[key] > 0) {
+                    db.additionalLoad[key]--;
+                    if (key === 'streetLamp' && db.lamps.length > 0) db.lamps.pop();
+                    saveDb(); updateUI();
+                }
+            });
+        });
+
+        ui.btnAtUp.addEventListener('click', () => { db.attachments.count++; ui.dispAttach.textContent = db.attachments.count; saveDb(); });
+        ui.btnAtDown.addEventListener('click', () => { if (db.attachments.count > 0) db.attachments.count--; ui.dispAttach.textContent = db.attachments.count; saveDb(); });
+        ui.selAttachMat.addEventListener('change', e => { db.attachments.material = e.target.value; saveDb(); });
+        ui.btnCancAtch.addEventListener('click', () => hideModal(ui.modalAttach));
+        ui.btnConfAtch.addEventListener('click', () => { hideModal(ui.modalAttach); afterAttachments(); });
+        ui.btnCancLamps.addEventListener('click', () => hideModal(ui.modalLamps));
+        ui.btnConfLamps.addEventListener('click', () => { hideModal(ui.modalLamps); startFill(); });
+
+        function genLampsUI() {
+            ui.lampsConfig.innerHTML = db.lamps.map((lamp, i) => `
+                <div class="lamp-card">
+                    <div class="lamp-header">💡 Фонарь ${i + 1}</div>
+                    <div class="field-group">
+                        <label class="field-label">Тип</label>
+                        <select class="field-select lamp-type" data-i="${i}">
+                            ${LAMP_TYPES.map(t => `<option value="${t}" ${lamp.type===t?'selected':''}>${t}</option>`).join('')}
+                        </select>
+                    </div>
+                    ${lamp.type === 'Ввод вручную' ? `<div class="field-group"><label class="field-label">Вручную</label><input type="text" class="field-input lamp-custom" data-i="${i}" value="${lamp.customType||''}" placeholder="ДРВ-250"></div>` : ''}
+                    <div class="field-group">
+                        <label class="field-label">Крепление</label>
+                        <div class="radio-group">
+                            <div class="radio-option"><input type="radio" class="radio-input lamp-mount" id="m${i}a" name="m${i}" value="приставной" ${lamp.mounting==='приставной'?'checked':''} data-i="${i}"><label class="radio-label" for="m${i}a">Приставной</label></div>
+                            <div class="radio-option"><input type="radio" class="radio-input lamp-mount" id="m${i}b" name="m${i}" value="консольный" ${lamp.mounting==='консольный'?'checked':''} data-i="${i}"><label class="radio-label" for="m${i}b">Консольный</label></div>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Питание</label>
+                        <div class="radio-group">
+                            <div class="radio-option"><input type="radio" class="radio-input lamp-power" id="p${i}a" name="p${i}" value="Кабель" ${lamp.powerSupply==='Кабель'?'checked':''} data-i="${i}"><label class="radio-label" for="p${i}a">Кабель</label></div>
+                            <div class="radio-option"><input type="radio" class="radio-input lamp-power" id="p${i}b" name="p${i}" value="Провод" ${lamp.powerSupply==='Провод'?'checked':''} data-i="${i}"><label class="radio-label" for="p${i}b">Провод</label></div>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Направление</label>
+                        <select class="field-select lamp-dir" data-i="${i}">
+                            <option value="перпендикулярно линии" ${lamp.direction==='перпендикулярно линии'?'selected':''}>Перпендикулярно</option>
+                            <option value="произвольно" ${lamp.direction==='произвольно'?'selected':''}>Произвольно</option>
+                            <option value="параллельно линии" ${lamp.direction==='параллельно линии'?'selected':''}>Параллельно</option>
+                        </select>
+                    </div>
+                </div>`).join('');
+
+            shadow.querySelectorAll('.lamp-type').forEach(s => s.addEventListener('change', e => { const i = +e.target.dataset.i; db.lamps[i].type = e.target.value; saveDb(); genLampsUI(); }));
+            shadow.querySelectorAll('.lamp-custom').forEach(s => s.addEventListener('input', e => { const i = +e.target.dataset.i; db.lamps[i].customType = e.target.value; saveDb(); }));
+            shadow.querySelectorAll('.lamp-mount').forEach(s => s.addEventListener('change', e => { const i = +e.target.dataset.i; db.lamps[i].mounting = e.target.value; saveDb(); }));
+            shadow.querySelectorAll('.lamp-power').forEach(s => s.addEventListener('change', e => { const i = +e.target.dataset.i; db.lamps[i].powerSupply = e.target.value; saveDb(); }));
+            shadow.querySelectorAll('.lamp-dir').forEach(s => s.addEventListener('change', e => { const i = +e.target.dataset.i; db.lamps[i].direction = e.target.value; saveDb(); }));
+        }
+
+        ui.btnFill.addEventListener('click', async () => {
+            clearLogs();
+            log('🚀 ЗАПУСК', 'info');
+            if (db.pillar.material === 'деревянная') {
+                ui.dispAttach.textContent = db.attachments.count || 0;
+                ui.selAttachMat.value = db.attachments.material || 'деревянная';
+                showModal(ui.modalAttach);
+            } else {
+                db.attachments.count = 0;
+                afterAttachments();
+            }
+        });
+
+        async function afterAttachments() {
+            if (db.additionalLoad.streetLamp > 0) { genLampsUI(); showModal(ui.modalLamps); }
+            else startFill();
+        }
+
+        async function startFill() {
+            showNotification('Заполнение...', 'info');
+            try {
+                log('═'.repeat(50), 'info');
+                log('v1.7.9 DEBUG 💜', 'info');
+                log('═'.repeat(50), 'info');
+
+                if (db.pillar.type) {
+                    const cur = document.querySelector('fieldset[name="pillarType"] .smwb-select-field__values');
+                    if (!cur || cur.textContent.trim() !== db.pillar.type)
+                        await clickReactSelect('fieldset[name="pillarType"] .smwb-select-field', db.pillar.type);
+                    await sleep(150);
+                }
+                await fillField('input[name="constructionType"]', db.pillar.constructionType, 'Конструктив');
+                await sleep(150);
+                await fillField('input[name="placement"]', db.pillar.placement, 'Местоположение');
+                await sleep(150);
+                await fillField('input[name="material"]', db.pillar.material, 'Материал');
+                await sleep(150);
+                if (db.pillar.material === 'деревянная')
+                    await fillField('input[name="woodTemporaryType"]', 'без обработки', 'Консервация');
+                await sleep(150);
+
+                log(`\n=== СТОЙКИ (${db.stands.count}) ===`, 'info');
+                if (await setCounter('input[name="stand.count"]', db.stands.count) && db.stands.count > 0) {
+                    await sleep(600);
+                    for (let i = 0; i < db.stands.count; i++) {
+                        log(`Стойка ${i+1}/${db.stands.count}`, 'info');
+                        await goToSlide(i); await sleep(200);
+                        await fillField(`input[name="stand.info[${i}].material"]`, db.stands.material, `Мат ${i+1}`);
+                        await sleep(100);
+                        await clickCamera(`fieldset[name="stand.info[${i}].photoUrls"] button.smwb-fab`);
+                        await sleep(100);
+                    }
+                }
+
+                if (db.bracing.count > 0) {
+                    log(`\n=== УКОСЫ (${db.bracing.count}) ===`, 'info');
+                    if (await setCounter('input[name="bracing.count"]', db.bracing.count)) {
+                        await sleep(600);
+                        for (let i = 0; i < db.bracing.count; i++) {
+                            log(`Укос ${i+1}/${db.bracing.count}`, 'info');
+                            await goToSlide(i); await sleep(200);
+                            await fillField(`input[name="bracing.info[${i}].material"]`, db.bracing.material, `Мат ${i+1}`);
+                            await sleep(100);
+                            await clickCamera(`fieldset[name="bracing.info[${i}].photoUrls"] button.smwb-fab`);
+                            await sleep(100);
+                        }
+                    }
+                }
+
+                if (db.pillar.material === 'деревянная' && db.attachments.count > 0) {
+                    log(`\n=== ПРИСТАВКИ (${db.attachments.count}) ===`, 'info');
+                    if (await setCounter('input[name="attachment.count"]', db.attachments.count)) {
+                        await sleep(600);
+                        for (let i = 0; i < db.attachments.count; i++) {
+                            log(`Приставка ${i+1}/${db.attachments.count}`, 'info');
+                            await goToSlide(i); await sleep(200);
+                            await fillField(`input[name="attachment.info[${i}].material"]`, db.attachments.material, `Мат ${i+1}`);
+                            await sleep(100);
+                            await clickCamera(`fieldset[name="attachment.info[${i}].photoUrls"] button.smwb-fab`);
+                            await sleep(100);
+                        }
+                    }
+                }
+
+                await syncLoads();
+
+                log('\n✅ ЗАПОЛНЕНИЕ ЗАВЕРШЕНО', 'success');
+                showNotification('✅ Готово!', 'success');
+
+            } catch (err) {
+                log(`❌ ОШИБКА: ${err.message}`, 'error');
+                log(err.stack, 'error');
+                showNotification('❌ Ошибка: ' + err.message, 'error');
+            }
+        }
+
+        ui.btnMin.addEventListener('click', () => {
+            db.ui.isCollapsed = !db.ui.isCollapsed;
+            ui.body.style.display = db.ui.isCollapsed ? 'none' : 'flex';
+            ui.collapsedInfo.classList.toggle('visible', db.ui.isCollapsed);
+            ui.btnMin.textContent = db.ui.isCollapsed ? '+' : '−';
+            saveDb();
+        });
+
+        let dragging = false, ox, oy;
+        shadow.querySelector('#dragHandle').addEventListener('mousedown', e => {
+            dragging = true; ox = e.clientX - ui.main.offsetLeft; oy = e.clientY - ui.main.offsetTop;
+            ui.main.style.cursor = 'grabbing';
+        });
+        document.addEventListener('mousemove', e => {
+            if (dragging) {
+                ui.main.style.left = (e.clientX - ox) + 'px';
+                ui.main.style.top  = (e.clientY - oy) + 'px';
+            }
+        });
+        document.addEventListener('mouseup', () => {
+            if (dragging) {
+                dragging = false; ui.main.style.cursor = '';
+                db.ui.pos = { x: parseInt(ui.main.style.left), y: parseInt(ui.main.style.top) };
+                saveDb();
+            }
+        });
+
+        ui.main.style.left = db.ui.pos.x + 'px';
+        ui.main.style.top  = db.ui.pos.y + 'px';
+        if (db.ui.isCollapsed) {
+            ui.body.style.display = 'none';
+            ui.collapsedInfo.classList.add('visible');
+            ui.btnMin.textContent = '+';
+        }
+
+        initSelects();
+        updateUI();
+        updateScale();
+        updateCompactMode();
+
+        log('✅ v1.7.9 DEBUG 💜 инициализирован', 'success');
+        showNotification('✅ v1.7.9 Debug Delete 💜', 'success');
+    }
+
+    function showUI() {
+        const h = document.getElementById('pillar-ui-host');
+        if (h) {
+            h.style.display = 'block';
+            log('✅ UI показан', 'success');
+        }
+    }
+
+    function hideUI() {
+        const h = document.getElementById('pillar-ui-host');
+        if (h) {
+            h.style.display = 'none';
+            log('🙈 UI скрыт', 'info');
+        }
+    }
+
+    function toggleUI() {
+        window.pillarUIManuallyHidden = !window.pillarUIManuallyHidden;
+        if (window.pillarUIManuallyHidden) {
+            hideUI();
+            showGlobalNotification('🙈 UI скрыт. ALT+О для показа', 'warning');
+        } else if (isPillarForm()) {
+            showUI();
+            showGlobalNotification('✅ UI показан. ALT+О для скрытия', 'success');
+        }
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.altKey && e.key.toLowerCase() === 'о') {
+            e.preventDefault();
+            toggleUI();
+        }
+    });
+
+    console.log('🚀 Автозаполнение опор v1.7.9 DEBUG 💜');
+    console.log('💡 ALT + О - показать/скрыть UI');
+    console.log('🗑️ Новый подход: поиск всех кнопок без переходов');
+    console.log('📋 Детальное логирование каждого шага');
+
+    window.pillarUIManuallyHidden = false;
+
+    // Инициализация с задержкой для гарантии загрузки DOM
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeUI();
+            startFormObserver();
+            log('✅ v1.7.9 DEBUG загружен (DOMContentLoaded) 💜', 'success');
+        });
+    } else {
+        initializeUI();
+        startFormObserver();
+        log('✅ v1.7.9 DEBUG загружен (immediate) 💜', 'success');
+    }
+})();

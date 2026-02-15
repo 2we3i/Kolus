@@ -1,0 +1,1446 @@
+// ==UserScript==
+// @name         KOLUS - Умный помощник заполнения форм
+// @namespace    kolus.ultimate
+// @version      1.6.0
+// @description  Интеллектуальный помощник заполнения форм с автодополнением и умным сканированием | Created by KAST Team
+// @match        https://moe2.agentumit.ru/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    console.log('🚀 KOLUS v1.6.0 загружен | Created by KAST Team');
+
+    const STORAGE_KEY = 'kolus_ultimate_v1';
+
+    const WIRE_DATABASE = [
+        'СИП 2х16', 'СИП 4х16', 'СИП 4х25', 'СИП 4х35', 'СИП 4х50', 'СИП 4х70', 'СИП 4х95', 'СИП 4х120', 'СИП 4х150',
+        'СИП 3х25', 'СИП 3х35', 'СИП 3х50', 'СИП 3х70', 'СИП 3х95', 'СИП 3х120',
+        'А-16', 'А-25', 'А-35', 'А-50', 'А-70', 'А-95', 'А-120', 'А-150', 'А-185', 'А-240',
+        'А 16', 'А 25', 'А 35', 'А 50', 'А 70', 'А 95', 'А 120', 'А 150', 'А 185', 'А 240',
+        'АС-16/2.7', 'АС-25/4.2', 'АС-35/6.2', 'АС-50/8', 'АС-70/11', 'АС-95/16', 'АС-120/19', 'АС-150/24', 'АС-185/29', 'АС-240/32',
+        'АВВГ 2х2.5', 'АВВГ 2х4', 'АВВГ 2х6', 'АВВГ 2х10', 'АВВГ 2х16', 'АВВГ 2х25', 'АВВГ 2х35',
+        'АВВГ 3х2.5', 'АВВГ 3х4', 'АВВГ 3х6', 'АВВГ 3х10', 'АВВГ 3х16', 'АВВГ 3х25', 'АВВГ 3х35',
+        'АВВГ 4х2.5', 'АВВГ 4х4', 'АВВГ 4х6', 'АВВГ 4х10', 'АВВГ 4х16', 'АВВГ 4х25', 'АВВГ 4х35', 'АВВГ 4х50', 'АВВГ 4х70',
+        'АВВГ 5х2.5', 'АВВГ 5х4', 'АВВГ 5х6', 'АВВГ 5х10', 'АВВГ 5х16', 'АВВГ 5х25',
+        'ВВГ 2х1.5', 'ВВГ 2х2.5', 'ВВГ 2х4', 'ВВГ 2х6', 'ВВГ 2х10', 'ВВГ 2х16', 'ВВГ 2х25',
+        'ВВГ 3х1.5', 'ВВГ 3х2.5', 'ВВГ 3х4', 'ВВГ 3х6', 'ВВГ 3х10', 'ВВГ 3х16', 'ВВГ 3х25', 'ВВГ 3х35',
+        'ВВГ 4х1.5', 'ВВГ 4х2.5', 'ВВГ 4х6', 'ВВГ 4х10', 'ВВГ 4х16', 'ВВГ 4х25', 'ВВГ 4х35', 'ВВГ 4х50',
+        'ВВГ 5х1.5', 'ВВГ 5х2.5', 'ВВГ 5х4', 'ВВГ 5х6', 'ВВГ 5х10', 'ВВГ 5х16', 'ВВГ 5х25',
+        'ПУГВ 1х1.5', 'ПУГВ 1х2.5', 'ПУГВ 1х4', 'ПУГВ 1х6', 'ПУГВ 1х10', 'ПУГВ 1х16', 'ПУГВ 1х25', 'ПУГВ 1х35', 'ПУГВ 1х50', 'ПУГВ 1х70', 'ПУГВ 1х95', 'ПУГВ 1х120',
+        'ПВ-1 1.5', 'ПВ-1 2.5', 'ПВ-1 4', 'ПВ-1 6', 'ПВ-1 10', 'ПВ-1 16', 'ПВ-1 25', 'ПВ-1 35', 'ПВ-1 50',
+        'ПВ-3 1.5', 'ПВ-3 2.5', 'ПВ-3 4', 'ПВ-3 6', 'ПВ-3 10', 'ПВ-3 16', 'ПВ-3 25', 'ПВ-3 35',
+        'АПВ 2.5', 'АПВ 4', 'АПВ 6', 'АПВ 10', 'АПВ 16', 'АПВ 25', 'АПВ 35', 'АПВ 50', 'АПВ 70', 'АПВ 95', 'АПВ 120',
+        'ПВС 2х0.75', 'ПВС 2х1.5', 'ПВС 2х2.5', 'ПВС 3х0.75', 'ПВС 3х1.5', 'ПВС 3х2.5', 'ПВС 4х1.5', 'ПВС 4х2.5',
+        'NYM 2х1.5', 'NYM 2х2.5', 'NYM 3х1.5', 'NYM 3х2.5', 'NYM 4х1.5', 'NYM 5х1.5',
+        'КВВГ 4х1.5', 'КВВГ 4х2.5', 'КВВГ 7х1.5', 'КВВГ 14х1.5', 'КВВГ 19х1.5',
+        'КГ 3х2.5', 'КГ 3х4', 'КГ 3х6', 'КГ 3х10', 'КГ 3х16', 'КГ 3х25'
+    ];
+
+    const defaultData = {
+        wireLength: '',
+        clearance: '5.0',
+        fastening: 'Натяжное',
+        crossingObject: 'Дерево',
+        couplingCount: '0',  // Добавлено: количество муфт
+        presets: [
+            { id: 'p1', name: '⚡ СИП Натяжка',  wireBrand: 'СИП 4х50', roadType: 'Асфальтовая', construction: 'ВЛ', terrain: 'населенная местность', designation: 'магистраль' },
+            { id: 'p2', name: '🔧 СИП Поддержка', wireBrand: 'СИП 4х50', roadType: 'Асфальтовая', construction: 'ВЛ', terrain: 'населенная местность', designation: 'магистраль' },
+            { id: 'p3', name: '🏙️ Город',         wireBrand: 'СИП 4х25', roadType: 'Асфальтовая', construction: 'ВЛ', terrain: 'населенная местность', designation: 'магистраль' }
+        ],
+        activeId: 'p1',
+        isCrossingEnabled: true,
+        pos: { x: 20, y: 20 },
+        isCollapsed: false,
+        isVisible: true,
+        scale: 100,
+        compactMode: false
+    };
+
+    let db = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultData;
+
+    // Миграция старых данных
+    if (!db.wireLength && db.wireLength !== '') db.wireLength = '';
+    if (!db.fastening) db.fastening = 'Натяжное';
+    if (!db.crossingObject) {
+        const firstPreset = db.presets && db.presets[0];
+        db.crossingObject = (firstPreset && firstPreset.crossingObject) || 'Дерево';
+    }
+    if (db.clearance === undefined) db.clearance = '5.0';
+    if (db.couplingCount === undefined) db.couplingCount = '0';  // Миграция для нового поля
+    if (db.presets && db.presets.length > 0) {
+        db.presets = db.presets.map(p => {
+            if (Array.isArray(p.fastenings)) delete p.fastenings;
+            delete p.fastening; delete p.wireLength; delete p.clearance;
+            delete p.crossingType; delete p.crossingObject;
+            return p;
+        });
+    }
+    if (db.scale === undefined) db.scale = 100;
+    if (db.isVisible === undefined) db.isVisible = true;
+    if (db.compactMode === undefined) db.compactMode = false;
+
+    const saveDb = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    const getActive = () => db.presets.find(p => p.id === db.activeId) || db.presets[0];
+
+    /******************************************************************
+     * ПРОВЕРКА ТИПА ФОРМЫ
+     ******************************************************************/
+    function isWireForm() {
+        return !!(
+            document.querySelector('fieldset[name="cableType"]') ||
+            document.querySelector('input[name="cableType"]') ||
+            document.querySelector('input[name="wireTension"]') ||
+            document.querySelector('input[name="phaseCount"]') ||
+            document.querySelector('input[name="designation"]')
+        );
+    }
+
+    function checkFormTypeAndInitialize() {
+        if (window.kolusUIInitialized) return true;
+        if (!isWireForm()) {
+            console.log('⚠️ KOLUS: Форма столба обнаружена, скрипт не активирован');
+            return false;
+        }
+        console.log('✅ KOLUS: Форма провода обнаружена, инициализация...');
+        return true;
+    }
+
+    /******************************************************************
+     * УТИЛИТЫ
+     ******************************************************************/
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    function findSimilarWires(input) {
+        if (!input || input.length < 1) return [];
+        const normalized = input.toLowerCase().trim();
+        return WIRE_DATABASE.filter(wire => wire.toLowerCase().includes(normalized)).slice(0, 5);
+    }
+
+    function wireMatches(wire1, wire2) {
+        if (!wire1 || !wire2) return false;
+        const n1 = wire1.toLowerCase().replace(/\s+/g, '').replace(/[-_]/g, '');
+        const n2 = wire2.toLowerCase().replace(/\s+/g, '').replace(/[-_]/g, '');
+        if (wire1 == '') {
+            return true;
+        }
+        return n1 === n2;
+    }
+
+    function isWireTypeA(wireBrand) {
+        if (!wireBrand) return false;
+        const n = wireBrand.trim().toUpperCase();
+        return (/^А[\s-]\d+/.test(n) || /^A[\s-]\d+/.test(n)) &&
+               !n.startsWith('АС') && !n.startsWith('AC') &&
+               !n.startsWith('АВ') && !n.startsWith('AB') &&
+               !n.startsWith('АП') && !n.startsWith('AP');
+    }
+
+    function isWireTypeAC(wireBrand) {
+        if (!wireBrand) return false;
+        const n = wireBrand.trim().toUpperCase();
+        return n.startsWith('АС') || n.startsWith('AC');
+    }
+
+    function isWireTypeAorAC(wireBrand) {
+        return isWireTypeA(wireBrand) || isWireTypeAC(wireBrand);
+    }
+
+    // НОВАЯ ФУНКЦИЯ: Проверка на СИП 2х16
+    function isSIP2x16(wireBrand) {
+        if (!wireBrand) return false;
+        const normalized = wireBrand.trim().toUpperCase().replace(/\s+/g, '').replace(/[-_]/g, '');
+        return normalized === 'СИП2Х16' || normalized === 'СИП2X16';
+    }
+
+    /******************************************************************
+     * РАБОТА С САЙТОМ
+     ******************************************************************/
+    function setReactInputValue(input, value) {
+        if (!input) return false;
+        try {
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            nativeSetter.call(input, value);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            return true;
+        } catch(e) {
+            console.warn('Ошибка установки значения:', e);
+            return false;
+        }
+    }
+
+    async function waitForInput(selector, timeout = 5000) {
+        const start = Date.now();
+        let input = document.querySelector(selector);
+        while (!input && Date.now() - start < timeout) {
+            await sleep(200);
+            input = document.querySelector(selector);
+        }
+        return input;
+    }
+
+    async function selectWireBrandReact(value) {
+        const select = document.querySelector('fieldset[name="cableType"] .smwb-select-field');
+        if (!select) {
+            console.warn('Селект марки провода не найден');
+            return false;
+        }
+        ['mousedown', 'mouseup', 'click'].forEach(t =>
+            select.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))
+        );
+        await sleep(300);
+        let option = null;
+        for (let i = 0; i < 50; i++) {
+            option = [...document.querySelectorAll('.smwb-menu__item')].find(o => o.textContent.trim() === value);
+            if (option) break;
+            await sleep(100);
+        }
+        if (option) {
+            ['mousedown', 'mouseup', 'click'].forEach(t =>
+                option.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))
+            );
+            await sleep(200);
+            return true;
+        }
+        console.warn('Марка провода не найдена в списке:', value);
+        return false;
+    }
+
+    function scanSiteData() {
+        const data = {};
+        const wireEl = document.querySelector('fieldset[name="cableType"] .smwb-select-field span') ||
+                       document.querySelector('input[name="cableType"]');
+        if (wireEl) data.wireBrand = (wireEl.textContent || wireEl.value || '').trim();
+        const fasteningEl = document.querySelector('input[name="fastening.type"]');
+        if (fasteningEl) data.fastening = fasteningEl.value;
+        const terrainEl = document.querySelector('input[name="areaType"]');
+        if (terrainEl) data.terrain = terrainEl.value;
+        const roadEl = document.querySelector('input[name="roadType"]');
+        if (roadEl) data.roadType = roadEl.value;
+        const constructionEl = document.querySelector('input[name="construction"]');
+        if (constructionEl) data.construction = constructionEl.value;
+        const crossObjEl = document.querySelector('input[name="crossing.object"]');
+        if (crossObjEl) data.crossingObject = crossObjEl.value;
+        const lengthSelectors = ['input[name*="length"]','input[name*="wireLength"]','input[name*="cableLength"]','input[placeholder*="метр"]','input[placeholder*="длин"]','[data-name*="length"] input','fieldset[name*="length"] input'];
+        for (const sel of lengthSelectors) {
+            const el = document.querySelector(sel);
+            if (el && el.value && !isNaN(parseFloat(el.value))) { data.wireLength = el.value; break; }
+        }
+        return data;
+    }
+
+    /******************************************************************
+     * НАБЛЮДАТЕЛЬ ЗА ФОРМОЙ (авто show/hide)
+     ******************************************************************/
+    function startFormObserver() {
+        // Инициализируем UI один раз (скрытым)
+        initializeUI();
+
+        function checkFormPresence() {
+            const formVisible = isWireForm();
+            const host = document.getElementById('kolus-ui-host');
+            if (!host) return;
+            if (formVisible && !window.kolusManuallyHidden) {
+                host.style.display = 'block';
+            } else {
+                host.style.display = 'none';
+            }
+        }
+
+        // Первичная проверка
+        checkFormPresence();
+
+        // Следим за изменениями DOM
+        const observer = new MutationObserver(() => checkFormPresence());
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    /******************************************************************
+     * UI (SHADOW DOM)
+     ******************************************************************/
+    function initializeUI() {
+        if (window.kolusUIInitialized) { console.log('⚠️ KOLUS: UI уже инициализирован'); return; }
+        window.kolusUIInitialized = true;
+
+        const host = document.createElement('div');
+        host.id = 'kolus-ui-host';
+        document.body.appendChild(host);
+        const shadow = host.attachShadow({ mode: 'open' });
+
+        const css = `
+        @keyframes slideIn { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        .root { position: fixed; width: 360px; background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%); border-radius: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; z-index: 1000000; box-shadow: 0 25px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1); color: #fff; overflow: hidden; animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); transform-origin: top left; display: flex; flex-direction: column; max-height: 90vh; }
+        .header { background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); padding: 14px 16px; cursor: move; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); user-select: none; flex-shrink: 0; }
+        .header-title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; letter-spacing: 0.5px; }
+        .header-icon { width: 20px; height: 20px; background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+        .header-controls { display: flex; gap: 8px; align-items: center; }
+        .header-btn { width: 28px; height: 28px; border-radius: 6px; background: rgba(255,255,255,0.1); border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 16px; line-height: 1; }
+        .header-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
+        .collapsed-info { padding: 12px 16px; display: none; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.2); }
+        .collapsed-info.visible { display: flex; }
+        .collapsed-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+        .collapsed-label { color: rgba(255,255,255,0.6); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
+        .collapsed-value { font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 5px; background: rgba(0,0,0,0.3); }
+        .collapsed-value.match-green { background: rgba(34,197,94,0.2); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
+        .collapsed-value.match-red { background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+        .collapsed-value.match-yellow { background: rgba(234,179,8,0.2); color: #eab308; border: 1px solid rgba(234,179,8,0.3); animation: pulse 2s infinite; }
+        .body { padding: 16px; padding-bottom: 90px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex: 1; }
+        .body::-webkit-scrollbar { width: 6px; }
+        .body::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 3px; }
+        .body::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.5); border-radius: 3px; }
+        .body::-webkit-scrollbar-thumb:hover { background: rgba(139,92,246,0.7); }
+        .status-panel { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .status-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+        .status-label { color: rgba(255,255,255,0.6); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
+        .status-value { font-weight: 700; font-size: 13px; padding: 4px 10px; border-radius: 6px; background: rgba(0,0,0,0.3); transition: all 0.3s; }
+        .status-value.match-green { background: rgba(34,197,94,0.2); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
+        .status-value.match-red { background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+        .status-value.match-yellow { background: rgba(234,179,8,0.2); color: #eab308; border: 1px solid rgba(234,179,8,0.3); animation: pulse 2s infinite; }
+        .divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent); margin: 4px 0; }
+        .field-group { display: flex; flex-direction: column; gap: 6px; }
+        .field-label { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 0.5px; }
+        .field-label-icon { font-size: 14px; }
+        .field-input { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 10px 14px; color: #fff; font-size: 13px; transition: all 0.2s; outline: none; font-family: inherit; }
+        .field-input::placeholder { color: rgba(255,255,255,0.4); }
+        .field-input:focus { border-color: rgba(139,92,246,0.6); background: rgba(0,0,0,0.4); box-shadow: 0 0 0 3px rgba(139,92,246,0.1); }
+        .field-input:disabled { opacity: 0.5; cursor: not-allowed; }
+        .preset-controls { display: flex; gap: 6px; }
+        .preset-controls .field-input { flex: 1; }
+        .preset-btn { width: 36px; height: 36px; border-radius: 8px; border: none; background: rgba(139,92,246,0.2); color: #8b5cf6; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: all 0.2s; flex-shrink: 0; }
+        .preset-btn:hover { background: rgba(139,92,246,0.3); transform: translateY(-1px); }
+        .preset-btn.add { background: rgba(34,197,94,0.2); color: #22c55e; }
+        .preset-btn.add:hover { background: rgba(34,197,94,0.3); }
+        .preset-btn.delete { background: rgba(239,68,68,0.2); color: #ef4444; }
+        .preset-btn.delete:hover { background: rgba(239,68,68,0.3); }
+        .preset-btn.edit { background: rgba(234,179,8,0.2); color: #eab308; }
+        .preset-btn.edit:hover { background: rgba(234,179,8,0.3); }
+        .clearance-row { display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px; }
+        .clearance-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 0.5px; }
+        .clearance-controls { display: flex; align-items: center; gap: 8px; }
+        .clearance-input { width: 60px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 6px 10px; color: #fff; font-size: 14px; font-weight: 700; text-align: center; outline: none; }
+        .clearance-input:focus { border-color: rgba(139,92,246,0.6); box-shadow: 0 0 0 3px rgba(139,92,246,0.1); }
+        .clearance-btn { width: 28px; height: 28px; border-radius: 6px; border: none; background: rgba(139,92,246,0.2); color: #8b5cf6; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; transition: all 0.2s; }
+        .clearance-btn:hover { background: rgba(139,92,246,0.3); transform: scale(1.05); }
+        .radio-group { display: flex; gap: 6px; flex-wrap: wrap; }
+        .radio-option { flex: 1; min-width: calc(33.33% - 4px); }
+        .radio-input { display: none; }
+        .radio-label { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; cursor: pointer; transition: all 0.2s; font-size: 12px; font-weight: 500; }
+        .radio-label:hover { background: rgba(0,0,0,0.4); border-color: rgba(139,92,246,0.4); }
+        .radio-input:checked + .radio-label { background: rgba(139,92,246,0.2); border-color: rgba(139,92,246,0.6); color: #a78bfa; }
+        .radio-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
+        .radio-input:checked + .radio-label .radio-dot { border-color: #8b5cf6; background: #8b5cf6; box-shadow: 0 0 0 3px rgba(139,92,246,0.2); }
+        .radio-input:checked + .radio-label .radio-dot::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #fff; }
+        .toggle-section { display: flex; align-items: center; gap: 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s; }
+        .toggle-section:hover { background: rgba(0,0,0,0.4); }
+        .toggle-switch { position: relative; width: 50px; height: 26px; flex-shrink: 0; }
+        .toggle-input { display: none; }
+        .toggle-slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.2); border-radius: 13px; transition: 0.3s; cursor: pointer; }
+        .toggle-slider::before { content: ''; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .toggle-input:checked + .toggle-slider { background: linear-gradient(135deg, #22c55e, #16a34a); }
+        .toggle-input:checked + .toggle-slider::before { transform: translateX(24px); }
+        .toggle-label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; flex: 1; pointer-events: none; }
+        .toggle-status { margin-left: auto; font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .toggle-status.active { background: rgba(34,197,94,0.2); color: #22c55e; }
+        .toggle-status.inactive { background: rgba(239,68,68,0.2); color: #ef4444; }
+        .crossing-fields { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; transition: all 0.3s; }
+        .crossing-fields.hidden { opacity: 0; max-height: 0; overflow: hidden; margin-top: 0; pointer-events: none; }
+        .crossing-objects { display: flex; flex-wrap: wrap; gap: 6px; }
+        .crossing-obj-option { flex: 1; min-width: calc(50% - 3px); }
+        .crossing-obj-input { display: none; }
+        .crossing-obj-label { display: flex; align-items: center; justify-content: center; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; cursor: pointer; transition: all 0.2s; font-size: 11px; font-weight: 500; text-align: center; }
+        .crossing-obj-label:hover { background: rgba(0,0,0,0.4); border-color: rgba(139,92,246,0.4); }
+        .crossing-obj-input:checked + .crossing-obj-label { background: rgba(139,92,246,0.2); border-color: rgba(139,92,246,0.6); color: #a78bfa; }
+        .crossing-obj-input:disabled + .crossing-obj-label { opacity: 0.4; cursor: not-allowed; }
+        .footer { position: absolute; bottom: 0; left: 0; right: 0; padding: 16px; background: linear-gradient(180deg, transparent, rgba(0,0,0,0.4)); display: flex; gap: 8px; backdrop-filter: blur(10px); border-top: 1px solid rgba(255,255,255,0.1); }
+        .btn { flex: 1; padding: 12px 20px; border: none; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; font-family: inherit; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn:disabled:hover { transform: none; }
+        .btn-fill { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff; box-shadow: 0 4px 12px rgba(139,92,246,0.3); }
+        .btn-fill:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(139,92,246,0.4); }
+        .btn-scan { background: linear-gradient(135deg, rgba(34,197,94,0.2), rgba(34,197,94,0.3)); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
+        .btn-scan:hover:not(:disabled) { background: linear-gradient(135deg, rgba(34,197,94,0.3), rgba(34,197,94,0.4)); transform: translateY(-1px); }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); align-items: center; justify-content: center; z-index: 1000001; animation: slideIn 0.2s ease-out; }
+        .modal { background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%); border-radius: 16px; padding: 24px; width: 90%; max-width: 360px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
+        .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; color: #fff; display: flex; align-items: center; gap: 8px; }
+        .modal-content { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+        .modal-text { font-size: 14px; color: rgba(255,255,255,0.8); line-height: 1.5; }
+        .modal-highlight { color: #8b5cf6; font-weight: 600; }
+        .modal-buttons { display: flex; gap: 8px; }
+        .modal-btn { flex: 1; padding: 12px 20px; border: none; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+        .modal-btn-primary { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff; }
+        .modal-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(139,92,246,0.4); }
+        .modal-btn-secondary { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); }
+        .modal-btn-secondary:hover { background: rgba(255,255,255,0.15); }
+        .suggestions { margin-top: 6px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; overflow: hidden; max-height: 200px; overflow-y: auto; animation: slideIn 0.2s ease-out; }
+        .suggestions-title { padding: 8px 12px; font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.5px; background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .suggestions-list { display: flex; flex-direction: column; }
+        .suggestion-item { padding: 10px 12px; font-size: 13px; color: rgba(255,255,255,0.9); cursor: pointer; transition: all 0.15s; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .suggestion-item:last-child { border-bottom: none; }
+        .suggestion-item:hover { background: rgba(139,92,246,0.2); color: #a78bfa; }
+        .notification { position: fixed; top: 20px; right: 20px; background: linear-gradient(135deg, rgba(34,197,94,0.95), rgba(0,0,0,0.95)); border: 1px solid rgba(34,197,94,0.5); border-radius: 12px; padding: 14px 18px; color: #fff; font-size: 13px; font-weight: 600; z-index: 1000002; box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: slideIn 0.3s ease-out; max-width: 300px; }
+        .notification-warning { background: linear-gradient(135deg, rgba(234,179,8,0.95), rgba(0,0,0,0.95)); border-color: rgba(234,179,8,0.5); }
+        .notification-error { background: linear-gradient(135deg, rgba(239,68,68,0.95), rgba(0,0,0,0.95)); border-color: rgba(239,68,68,0.5); }
+        .discord-link { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; background: rgba(88,101,242,0.2); border: 1px solid rgba(88,101,242,0.3); border-radius: 10px; color: #5865f2; font-size: 11px; font-weight: 600; text-decoration: none; transition: all 0.2s; margin-top: 12px; }
+        .discord-link:hover { background: rgba(88,101,242,0.3); transform: translateY(-1px); }
+        .scale-controls { display: flex; align-items: center; gap: 6px; }
+        .scale-btn { width: 24px; height: 24px; border-radius: 5px; border: none; background: rgba(255,255,255,0.1); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; transition: all 0.2s; }
+        .scale-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
+        .scale-value { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.8); min-width: 36px; text-align: center; }
+        .settings-bar { display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px; }
+        .settings-bar-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 0.5px; }
+        .settings-toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+        .settings-toggle-input { display: none; }
+        .settings-toggle-slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.2); border-radius: 12px; transition: 0.3s; cursor: pointer; }
+        .settings-toggle-slider::before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .settings-toggle-input:checked + .settings-toggle-slider { background: linear-gradient(135deg, #22c55e, #16a34a); }
+        .settings-toggle-input:checked + .settings-toggle-slider::before { transform: translateX(20px); }
+        .root.compact { max-height: none; }
+        .root.compact .body { max-height: none; overflow-y: visible; }
+        `;
+
+        const html = `
+        <div class="root" id="mainPanel">
+            <div class="header" id="dragHandle">
+                <div class="header-title">
+                    <div class="header-icon">⚡</div>
+                    <span>KOLUS v1.6.0</span>
+                </div>
+                <div class="header-controls">
+                    <div class="scale-controls">
+                        <button class="scale-btn" id="btnScaleDown">−</button>
+                        <span class="scale-value" id="scaleValue">100%</span>
+                        <button class="scale-btn" id="btnScaleUp">+</button>
+                    </div>
+                    <button class="header-btn" id="btnSettings" title="Настройки">⚙️</button>
+                    <button class="header-btn" id="btnMinimize">−</button>
+                </div>
+            </div>
+
+            <div class="collapsed-info" id="collapsedInfo">
+                <div class="collapsed-row">
+                    <span class="collapsed-label">📡 Марка на сайте</span>
+                    <span class="collapsed-value match-yellow" id="collapsedWire">...</span>
+                </div>
+                <div class="collapsed-row">
+                    <span class="collapsed-label">🎯 Активный пресет</span>
+                    <span class="collapsed-value" id="collapsedPreset" style="color:#8b5cf6;">—</span>
+                </div>
+            </div>
+
+            <div class="body" id="bodyContent">
+                <div class="status-panel">
+                    <div class="status-row">
+                        <span class="status-label">📡 Марка на сайте</span>
+                        <span class="status-value match-yellow" id="statusWire">...</span>
+                    </div>
+                    <div class="status-row">
+                        <span class="status-label">📋 Активный пресет</span>
+                        <span class="status-value" id="statusPreset" style="color:#8b5cf6;">—</span>
+                    </div>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label">
+                        <span class="field-label-icon">🎯</span>
+                        Пресет конфигурации
+                    </label>
+                    <div class="preset-controls">
+                        <select class="field-input" id="presetSelect"></select>
+                        <button class="preset-btn add"    id="btnAddPreset"    title="Создать пресет">+</button>
+                        <button class="preset-btn edit"   id="btnEditPreset"   title="Редактировать">✏️</button>
+                        <button class="preset-btn delete" id="btnDeletePreset" title="Удалить">🗑️</button>
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- НАСТРОЙКИ -->
+                <div id="settingsPanel" style="display:none; flex-direction:column; gap:8px;">
+                    <div class="settings-bar">
+                        <span class="settings-bar-label">📐 Компактный режим (без прокрутки)</span>
+                        <label class="settings-toggle">
+                            <input type="checkbox" class="settings-toggle-input" id="toggleCompact">
+                            <span class="settings-toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="divider"></div>
+                </div>
+
+                <div class="clearance-row">
+                    <span class="clearance-label">📏 Габарит (м) — для всех</span>
+                    <div class="clearance-controls">
+                        <button class="clearance-btn" id="btnClearanceMinus">−</button>
+                        <input  type="number" class="clearance-input" id="inputClearance"
+                                step="0.5" min="1.0" max="15.0" value="5.0">
+                        <button class="clearance-btn" id="btnClearancePlus">+</button>
+                    </div>
+                </div>
+
+                <!-- НОВОЕ ПОЛЕ: Количество муфт -->
+                <div class="clearance-row">
+                    <span class="clearance-label">🔌 Количество муфт</span>
+                    <div class="clearance-controls">
+                        <button class="clearance-btn" id="btnCouplingMinus">−</button>
+                        <input  type="number" class="clearance-input" id="inputCouplingCount"
+                                step="1" min="0" max="50" value="0">
+                        <button class="clearance-btn" id="btnCouplingPlus">+</button>
+                    </div>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label">
+                        <span class="field-label-icon">📐</span>
+                        Длина провода (м) — общая для всех
+                    </label>
+                    <input type="number" min="0" step="0.1" class="field-input" id="inputWireLength" placeholder="Введите длину провода...">
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label">
+                        <span class="field-label-icon">🔌</span>
+                        Марка провода
+                    </label>
+                    <input type="text" class="field-input" id="inputWireBrand" placeholder="Введите марку провода..." autocomplete="off">
+                    <div id="wireSuggestions" class="suggestions" style="display:none;">
+                        <div class="suggestions-title">💡 Похожие варианты:</div>
+                        <div class="suggestions-list" id="wireSuggestionsList"></div>
+                    </div>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label">
+                        <span class="field-label-icon">⚙️</span>
+                        Способ крепления — общий для всех
+                    </label>
+                    <div class="radio-group">
+                        <div class="radio-option">
+                            <input type="radio" class="radio-input" id="fasteningNatyazhnoe" name="fastening" value="Натяжное" checked>
+                            <label class="radio-label" for="fasteningNatyazhnoe"><span class="radio-dot"></span><span>Натяжное</span></label>
+                        </div>
+                        <div class="radio-option">
+                            <input type="radio" class="radio-input" id="fasteningPodderzh" name="fastening" value="Поддерживающее">
+                            <label class="radio-label" for="fasteningPodderzh"><span class="radio-dot"></span><span>Поддерж.</span></label>
+                        </div>
+                        <div class="radio-option">
+                            <input type="radio" class="radio-input" id="fasteningAnkernoe" name="fastening" value="Анкерное">
+                            <label class="radio-label" for="fasteningAnkernoe"><span class="radio-dot"></span><span>Анкерное</span></label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="toggle-section" id="toggleCrossing">
+                    <div class="toggle-switch">
+                        <input type="checkbox" class="toggle-input" id="crossingToggle" checked>
+                        <span class="toggle-slider"></span>
+                    </div>
+                    <div class="toggle-label">
+                        <span>🔀</span><span>Заполнение пересечений</span>
+                        <span class="toggle-status active" id="toggleStatus">ВКЛ</span>
+                    </div>
+                </div>
+
+                <div class="crossing-fields" id="crossingFields">
+                    <div class="field-group">
+                        <label class="field-label">
+                            <span class="field-label-icon">🌳</span>
+                            Объект пересечения — общий для всех
+                        </label>
+                        <div class="crossing-objects">
+                            <div class="crossing-obj-option">
+                                <input type="radio" class="crossing-obj-input" id="crossTree"     name="crossingObject" value="Дерево"    checked>
+                                <label class="crossing-obj-label" for="crossTree">🌲 Дерево</label>
+                            </div>
+                            <div class="crossing-obj-option">
+                                <input type="radio" class="crossing-obj-input" id="crossFence"    name="crossingObject" value="Забор">
+                                <label class="crossing-obj-label" for="crossFence">🚧 Забор</label>
+                            </div>
+                            <div class="crossing-obj-option">
+                                <input type="radio" class="crossing-obj-input" id="crossRoad"     name="crossingObject" value="Дорога">
+                                <label class="crossing-obj-label" for="crossRoad">🛣️ Дорога</label>
+                            </div>
+                            <div class="crossing-obj-option">
+                                <input type="radio" class="crossing-obj-input" id="crossBuilding" name="crossingObject" value="Строение">
+                                <label class="crossing-obj-label" for="crossBuilding">🏠 Строение</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="field-group">
+                    <label class="field-label">
+                        <span class="field-label-icon">🏗️</span>
+                        Тип конструкции
+                    </label>
+                    <div class="radio-group">
+                        <div class="radio-option">
+                            <input type="radio" class="radio-input" id="constructionVL" name="construction" value="ВЛ" checked>
+                            <label class="radio-label" for="constructionVL"><span class="radio-dot"></span><span>ВЛ</span></label>
+                        </div>
+                        <div class="radio-option">
+                            <input type="radio" class="radio-input" id="constructionKL" name="construction" value="КЛ">
+                            <label class="radio-label" for="constructionKL"><span class="radio-dot"></span><span>КЛ</span></label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label">
+                        <span class="field-label-icon">🛣️</span>
+                        Тип дороги
+                    </label>
+                    <div class="radio-group">
+                        <div class="radio-option">
+                            <input type="radio" class="radio-input" id="roadAsphalt" name="roadType" value="Асфальтовая" checked>
+                            <label class="radio-label" for="roadAsphalt"><span class="radio-dot"></span><span>Асфальт</span></label>
+                        </div>
+                        <div class="radio-option">
+                            <input type="radio" class="radio-input" id="roadGround" name="roadType" value="Грунтовая">
+                            <label class="radio-label" for="roadGround"><span class="radio-dot"></span><span>Грунт</span></label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label">
+                        <span class="field-label-icon">🌍</span>
+                        Тип местности
+                    </label>
+                    <input type="text" class="field-input" id="inputTerrain" placeholder="Введите тип местности...">
+                </div>
+
+                <a href="#" class="discord-link" id="discordLink">
+                    <span>💬</span>
+                    <span>Discord: KAST Team</span>
+                </a>
+            </div>
+
+            <div class="footer">
+                <button class="btn btn-scan" id="btnScan">
+                    <span>🔍</span><span>Сканировать</span>
+                </button>
+                <button class="btn btn-fill" id="btnFill">
+                    <span>✨</span><span>Заполнить</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Модалки -->
+        <div class="modal-overlay" id="modalAddPreset">
+            <div class="modal">
+                <div class="modal-title">➕ Создать новый пресет</div>
+                <div class="modal-content">
+                    <input type="text" class="field-input" id="inputNewPresetName" placeholder="Название пресета...">
+                </div>
+                <div class="modal-buttons">
+                    <button class="modal-btn modal-btn-secondary" id="btnCancelAdd">Отмена</button>
+                    <button class="modal-btn modal-btn-primary"   id="btnConfirmAdd">Создать</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="modalEditPreset">
+            <div class="modal">
+                <div class="modal-title">✏️ Переименовать пресет</div>
+                <div class="modal-content">
+                    <input type="text" class="field-input" id="inputEditPresetName" placeholder="Новое название...">
+                </div>
+                <div class="modal-buttons">
+                    <button class="modal-btn modal-btn-secondary" id="btnCancelEdit">Отмена</button>
+                    <button class="modal-btn modal-btn-primary"   id="btnConfirmEdit">Сохранить</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="modalDeletePreset">
+            <div class="modal">
+                <div class="modal-title">🗑️ Удалить пресет?</div>
+                <div class="modal-content">
+                    <p class="modal-text">Вы действительно хотите удалить пресет <span class="modal-highlight" id="deletePresetName"></span>?</p>
+                </div>
+                <div class="modal-buttons">
+                    <button class="modal-btn modal-btn-secondary" id="btnCancelDelete">Отмена</button>
+                    <button class="modal-btn modal-btn-primary"   id="btnConfirmDelete">Удалить</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="modalWireBinding">
+            <div class="modal">
+                <div class="modal-title">🔗 Выберите тип вязки</div>
+                <div class="modal-content">
+                    <p class="modal-text">
+                        Марка: <span class="modal-highlight" id="wireTypeDisplay"></span><br>
+                        Крепление: <span class="modal-highlight" id="fasteningTypeDisplay"></span>
+                    </p>
+                    <div class="radio-group" style="flex-direction:column;">
+                        <div class="radio-option" style="min-width:100%;">
+                            <input type="radio" class="radio-input" id="bindingEnd" name="bindingType" value="end" checked>
+                            <label class="radio-label" for="bindingEnd" style="font-size:12px;"><span class="radio-dot"></span><span>Вязка концевая</span></label>
+                        </div>
+                        <div class="radio-option" style="min-width:100%;">
+                            <input type="radio" class="radio-input" id="bindingThrough" name="bindingType" value="through">
+                            <label class="radio-label" for="bindingThrough" style="font-size:12px;"><span class="radio-dot"></span><span>Вязка проходная</span></label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-buttons">
+                    <button class="modal-btn modal-btn-secondary" id="btnCancelBinding">Отмена</button>
+                    <button class="modal-btn modal-btn-primary"   id="btnConfirmBinding">Продолжить</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-overlay" id="modalAnchorType">
+            <div class="modal">
+                <div class="modal-title">⚓ Выберите тип анкерного крепления</div>
+                <div class="modal-content" id="anchorOptions">
+                    <!-- Динамически заполняется -->
+                </div>
+                <div class="modal-buttons">
+                    <button class="modal-btn modal-btn-secondary" id="btnCancelAnchor">Отмена</button>
+                    <button class="modal-btn modal-btn-primary"   id="btnConfirmAnchor">Продолжить</button>
+                </div>
+            </div>
+        </div>
+        `;
+
+        shadow.innerHTML = `<style>${css}</style>${html}`;
+
+        const ui = {
+            main: shadow.querySelector('#mainPanel'),
+            body: shadow.querySelector('#bodyContent'),
+            btnMinimize: shadow.querySelector('#btnMinimize'),
+            btnFill: shadow.querySelector('#btnFill'),
+            btnScan: shadow.querySelector('#btnScan'),
+            inputWireLength: shadow.querySelector('#inputWireLength'),
+            inputWireBrand: shadow.querySelector('#inputWireBrand'),
+            inputTerrain: shadow.querySelector('#inputTerrain'),
+            wireSuggestions: shadow.querySelector('#wireSuggestions'),
+            wireSuggestionsList: shadow.querySelector('#wireSuggestionsList'),
+            fasteningNatyazhnoe: shadow.querySelector('#fasteningNatyazhnoe'),
+            fasteningPodderzh: shadow.querySelector('#fasteningPodderzh'),
+            fasteningAnkernoe: shadow.querySelector('#fasteningAnkernoe'),
+            crossingToggle: shadow.querySelector('#crossingToggle'),
+            toggleStatus: shadow.querySelector('#toggleStatus'),
+            crossingFields: shadow.querySelector('#crossingFields'),
+            constructionKL: shadow.querySelector('#constructionKL'),
+            constructionVL: shadow.querySelector('#constructionVL'),
+            roadGround: shadow.querySelector('#roadGround'),
+            roadAsphalt: shadow.querySelector('#roadAsphalt'),
+            crossTree: shadow.querySelector('#crossTree'),
+            crossFence: shadow.querySelector('#crossFence'),
+            crossRoad: shadow.querySelector('#crossRoad'),
+            crossBuilding: shadow.querySelector('#crossBuilding'),
+            statusWire: shadow.querySelector('#statusWire'),
+            statusPreset: shadow.querySelector('#statusPreset'),
+            collapsedWire: shadow.querySelector('#collapsedWire'),
+            collapsedPreset: shadow.querySelector('#collapsedPreset'),
+            collapsedInfo: shadow.querySelector('#collapsedInfo'),
+            presetSelect: shadow.querySelector('#presetSelect'),
+            btnAddPreset: shadow.querySelector('#btnAddPreset'),
+            btnEditPreset: shadow.querySelector('#btnEditPreset'),
+            btnDeletePreset: shadow.querySelector('#btnDeletePreset'),
+            modalAddPreset: shadow.querySelector('#modalAddPreset'),
+            modalEditPreset: shadow.querySelector('#modalEditPreset'),
+            modalDeletePreset: shadow.querySelector('#modalDeletePreset'),
+            inputNewPresetName: shadow.querySelector('#inputNewPresetName'),
+            inputEditPresetName: shadow.querySelector('#inputEditPresetName'),
+            deletePresetName: shadow.querySelector('#deletePresetName'),
+            btnCancelAdd: shadow.querySelector('#btnCancelAdd'),
+            btnConfirmAdd: shadow.querySelector('#btnConfirmAdd'),
+            btnCancelEdit: shadow.querySelector('#btnCancelEdit'),
+            btnConfirmEdit: shadow.querySelector('#btnConfirmEdit'),
+            btnCancelDelete: shadow.querySelector('#btnCancelDelete'),
+            btnConfirmDelete: shadow.querySelector('#btnConfirmDelete'),
+            discordLink: shadow.querySelector('#discordLink'),
+            modalWireBinding: shadow.querySelector('#modalWireBinding'),
+            btnCancelBinding: shadow.querySelector('#btnCancelBinding'),
+            btnConfirmBinding: shadow.querySelector('#btnConfirmBinding'),
+            wireTypeDisplay: shadow.querySelector('#wireTypeDisplay'),
+            fasteningTypeDisplay: shadow.querySelector('#fasteningTypeDisplay'),
+            bindingEnd: shadow.querySelector('#bindingEnd'),
+            bindingThrough: shadow.querySelector('#bindingThrough'),
+            modalAnchorType: shadow.querySelector('#modalAnchorType'),
+            anchorOptions: shadow.querySelector('#anchorOptions'),
+            btnCancelAnchor: shadow.querySelector('#btnCancelAnchor'),
+            btnConfirmAnchor: shadow.querySelector('#btnConfirmAnchor'),
+            inputClearance: shadow.querySelector('#inputClearance'),
+            btnClearanceMinus: shadow.querySelector('#btnClearanceMinus'),
+            btnClearancePlus: shadow.querySelector('#btnClearancePlus'),
+            btnScaleUp: shadow.querySelector('#btnScaleUp'),
+            btnScaleDown: shadow.querySelector('#btnScaleDown'),
+            scaleValue: shadow.querySelector('#scaleValue'),
+            btnSettings: shadow.querySelector('#btnSettings'),
+            settingsPanel: shadow.querySelector('#settingsPanel'),
+            toggleCompact: shadow.querySelector('#toggleCompact'),
+            // НОВЫЕ ЭЛЕМЕНТЫ: Количество муфт
+            inputCouplingCount: shadow.querySelector('#inputCouplingCount'),
+            btnCouplingMinus: shadow.querySelector('#btnCouplingMinus'),
+            btnCouplingPlus: shadow.querySelector('#btnCouplingPlus')
+        };
+
+        /******************************************************************
+         * АВТОДОПОЛНЕНИЕ МАРКИ ПРОВОДА
+         ******************************************************************/
+        ui.inputWireBrand.addEventListener('input', (e) => {
+            const v = e.target.value.trim();
+            if (v.length >= 1) {
+                const similar = findSimilarWires(v);
+                if (similar.length > 0) {
+                    ui.wireSuggestionsList.innerHTML = similar.map(w =>
+                        `<div class="suggestion-item" data-wire="${w}">${w}</div>`
+                    ).join('');
+                    ui.wireSuggestions.style.display = 'block';
+                } else {
+                    ui.wireSuggestions.style.display = 'none';
+                }
+            } else {
+                ui.wireSuggestions.style.display = 'none';
+            }
+        });
+        ui.wireSuggestionsList.addEventListener('click', (e) => {
+            if (e.target.classList.contains('suggestion-item')) {
+                const wire = e.target.dataset.wire;
+                ui.inputWireBrand.value = wire;
+                getActive().wireBrand = wire;
+                saveDb();
+                ui.wireSuggestions.style.display = 'none';
+            }
+        });
+        document.addEventListener('click', (e) => {
+            if (!shadow.contains(e.target)) ui.wireSuggestions.style.display = 'none';
+        });
+
+        /******************************************************************
+         * СОХРАНЕНИЕ ПОЛЕЙ
+         ******************************************************************/
+        ui.inputWireLength.addEventListener('input', (e) => { db.wireLength = e.target.value; saveDb(); });
+        ui.inputWireBrand.addEventListener('input', (e) => { getActive().wireBrand = e.target.value; saveDb(); });
+        ui.inputTerrain.addEventListener('input',    (e) => { getActive().terrain = e.target.value; saveDb(); });
+        [ui.fasteningNatyazhnoe, ui.fasteningPodderzh, ui.fasteningAnkernoe].forEach(r =>
+            r.addEventListener('change', (e) => { if (e.target.checked) { db.fastening = e.target.value; saveDb(); } })
+        );
+        [ui.constructionKL, ui.constructionVL].forEach(r =>
+            r.addEventListener('change', (e) => { if (e.target.checked) { getActive().construction = e.target.value; saveDb(); updateCrossingFieldsState(); } })
+        );
+        [ui.roadGround, ui.roadAsphalt].forEach(r =>
+            r.addEventListener('change', (e) => { if (e.target.checked) { getActive().roadType = e.target.value; saveDb(); } })
+        );
+        [ui.crossTree, ui.crossFence, ui.crossRoad, ui.crossBuilding].forEach(r =>
+            r.addEventListener('change', (e) => { if (e.target.checked) { db.crossingObject = e.target.value; saveDb(); } })
+        );
+
+        /******************************************************************
+         * ГАБАРИТ
+         ******************************************************************/
+        function clampClearance(val) { return Math.max(1.0, Math.min(15.0, val)); }
+        function updateClearanceDisplay() { ui.inputClearance.value = db.clearance; }
+        ui.btnClearanceMinus.addEventListener('click', () => {
+            db.clearance = clampClearance(parseFloat(db.clearance) - 0.5).toFixed(1);
+            updateClearanceDisplay(); saveDb();
+        });
+        ui.btnClearancePlus.addEventListener('click', () => {
+            db.clearance = clampClearance(parseFloat(db.clearance) + 0.5).toFixed(1);
+            updateClearanceDisplay(); saveDb();
+        });
+        ui.inputClearance.addEventListener('change', () => {
+            const v = parseFloat(ui.inputClearance.value);
+            if (!isNaN(v)) db.clearance = clampClearance(v).toFixed(1);
+            updateClearanceDisplay(); saveDb();
+        });
+
+        /******************************************************************
+         * КОЛИЧЕСТВО МУФТ (НОВЫЙ ФУНКЦИОНАЛ)
+         ******************************************************************/
+        function clampCouplingCount(val) { return Math.max(0, Math.min(50, val)); }
+        function updateCouplingDisplay() { ui.inputCouplingCount.value = db.couplingCount; }
+
+        ui.btnCouplingMinus.addEventListener('click', () => {
+            db.couplingCount = clampCouplingCount(parseInt(db.couplingCount) - 1).toString();
+            updateCouplingDisplay(); saveDb();
+        });
+        ui.btnCouplingPlus.addEventListener('click', () => {
+            db.couplingCount = clampCouplingCount(parseInt(db.couplingCount) + 1).toString();
+            updateCouplingDisplay(); saveDb();
+        });
+        ui.inputCouplingCount.addEventListener('change', () => {
+            const v = parseInt(ui.inputCouplingCount.value);
+            if (!isNaN(v)) db.couplingCount = clampCouplingCount(v).toString();
+            updateCouplingDisplay(); saveDb();
+        });
+
+        /******************************************************************
+         * ВАЛИДАЦИЯ ЧИСЛОВЫХ ПОЛЕЙ
+         ******************************************************************/
+        function validateNumberInput(input) {
+            const value = parseFloat(input.value);
+            if (value < 0 || input.value === '' || isNaN(value)) {
+                input.value = '';
+                showNotification('⚠️ Буксин не шали!', 'warning');
+                return false;
+            }
+            return true;
+        }
+        ui.inputWireLength.addEventListener('blur', function() {
+            if (this.value && !validateNumberInput(this)) { db.wireLength = ''; saveDb(); }
+        });
+
+        /******************************************************************
+         * МАСШТАБИРОВАНИЕ
+         ******************************************************************/
+        function updateScale() {
+            ui.main.style.transform = `scale(${db.scale / 100})`;
+            ui.scaleValue.textContent = `${db.scale}%`;
+        }
+        ui.btnScaleUp.addEventListener('click',   () => { if (db.scale < 150) { db.scale += 5; updateScale(); saveDb(); } });
+        ui.btnScaleDown.addEventListener('click', () => { if (db.scale > 60)  { db.scale -= 5; updateScale(); saveDb(); } });
+
+        /******************************************************************
+         * НАСТРОЙКИ — ПАНЕЛЬ И КОМПАКТНЫЙ РЕЖИМ
+         ******************************************************************/
+        let settingsPanelOpen = false;
+        function updateCompactMode() {
+            ui.main.classList.toggle('compact', db.compactMode);
+            ui.toggleCompact.checked = db.compactMode;
+        }
+        ui.btnSettings.addEventListener('click', () => {
+            settingsPanelOpen = !settingsPanelOpen;
+            ui.settingsPanel.style.display = settingsPanelOpen ? 'flex' : 'none';
+            ui.btnSettings.style.background = settingsPanelOpen ? 'rgba(139,92,246,0.4)' : 'rgba(255,255,255,0.1)';
+        });
+        ui.toggleCompact.addEventListener('change', (e) => {
+            db.compactMode = e.target.checked;
+            updateCompactMode();
+            saveDb();
+            showNotification(db.compactMode ? '📐 Компактный режим включён' : '📐 Компактный режим выключен', 'success');
+        });
+
+        /******************************************************************
+         * УВЕДОМЛЕНИЯ
+         ******************************************************************/
+        function showNotification(message, type = 'success') {
+            const n = document.createElement('div');
+            n.className = `notification notification-${type}`;
+            n.textContent = message;
+            shadow.appendChild(n);
+            setTimeout(() => { n.style.animation = 'slideIn 0.3s ease-out reverse'; setTimeout(() => n.remove(), 300); }, 3000);
+        }
+
+        /******************************************************************
+         * УПРАВЛЕНИЕ ПРЕСЕТАМИ
+         ******************************************************************/
+        function generatePresetId() { return 'p' + Date.now() + Math.random().toString(36).substr(2, 5); }
+
+        function createPreset(name) {
+            const cur = getActive();
+            const np = { id: generatePresetId(), name, wireBrand: cur.wireBrand || '', roadType: cur.roadType || 'Асфальтовая', construction: cur.construction || 'ВЛ', terrain: cur.terrain || '', designation: cur.designation || 'магистраль' };
+            db.presets.push(np); db.activeId = np.id; saveDb(); updateUI();
+            showNotification(`✅ Пресет "${name}" создан!`, 'success');
+        }
+        function renamePreset(newName) {
+            const p = getActive();
+            if (p) { p.name = newName; saveDb(); updateUI(); showNotification(`✅ Пресет переименован в "${newName}"`, 'success'); }
+        }
+        function deletePreset() {
+            if (db.presets.length <= 1) { showNotification('⚠️ Нельзя удалить последний пресет!', 'warning'); return; }
+            const idx = db.presets.findIndex(p => p.id === db.activeId);
+            db.presets = db.presets.filter(p => p.id !== db.activeId);
+            db.activeId = db.presets[Math.min(idx, db.presets.length - 1)].id;
+            saveDb(); updateUI(); showNotification('✅ Пресет удалён', 'success');
+        }
+        function showModal(m) { m.style.display = 'flex'; }
+        function hideModal(m) { m.style.display = 'none'; }
+
+        /******************************************************************
+         * ОБНОВЛЕНИЕ UI
+         ******************************************************************/
+        function updateToggleStatus() {
+            const on = ui.crossingToggle.checked;
+            ui.toggleStatus.textContent = on ? 'ВКЛ' : 'ВЫКЛ';
+            ui.toggleStatus.className = on ? 'toggle-status active' : 'toggle-status inactive';
+            ui.crossingFields.classList.toggle('hidden', !on);
+        }
+        function updateCrossingFieldsState() {
+            const kl = ui.constructionKL.checked, on = ui.crossingToggle.checked;
+            [ui.crossTree, ui.crossFence, ui.crossRoad, ui.crossBuilding].forEach(r => r.disabled = kl);
+            ui.crossingFields.classList.toggle('hidden', !on);
+        }
+        function updateUI() {
+            const preset = getActive();
+            ui.inputWireLength.value = db.wireLength || '';
+            ui.inputWireBrand.value  = preset.wireBrand || '';
+            ui.inputTerrain.value    = preset.terrain || '';
+            updateClearanceDisplay();
+            updateCouplingDisplay();  // Обновление поля муфт
+
+            const f = db.fastening || 'Натяжное';
+            ui.fasteningNatyazhnoe.checked = f === 'Натяжное';
+            ui.fasteningPodderzh.checked   = f === 'Поддерживающее';
+            ui.fasteningAnkernoe.checked   = f === 'Анкерное';
+
+            (preset.construction === 'КЛ' ? ui.constructionKL : ui.constructionVL).checked = true;
+            (preset.roadType === 'Грунтовая' ? ui.roadGround : ui.roadAsphalt).checked = true;
+
+            const co = db.crossingObject || 'Дерево';
+            if (co === 'Дерево')    ui.crossTree.checked     = true;
+            if (co === 'Забор')     ui.crossFence.checked    = true;
+            if (co === 'Дорога')    ui.crossRoad.checked     = true;
+            if (co === 'Строение')  ui.crossBuilding.checked = true;
+
+            ui.presetSelect.innerHTML = db.presets.map(p =>
+                `<option value="${p.id}" ${p.id === db.activeId ? 'selected' : ''}>${p.name}</option>`
+            ).join('');
+
+            ui.statusPreset.textContent = preset.name;
+            ui.collapsedPreset.textContent = preset.name;
+            ui.crossingToggle.checked = db.isCrossingEnabled;
+            updateToggleStatus();
+            updateCrossingFieldsState();
+            updateScale();
+            updateCompactMode();
+        }
+
+        /******************************************************************
+         * СОХРАНЕНИЕ НАСТРОЕК КОНСТРУКЦИИ И ДОРОГИ
+         ******************************************************************/
+        [ui.constructionKL, ui.constructionVL].forEach(r =>
+            r.addEventListener('change', (e) => { if (e.target.checked) { getActive().construction = e.target.value; saveDb(); updateCrossingFieldsState(); } })
+        );
+        [ui.roadGround, ui.roadAsphalt].forEach(r =>
+            r.addEventListener('change', (e) => { if (e.target.checked) { getActive().roadType = e.target.value; saveDb(); } })
+        );
+        [ui.crossTree, ui.crossFence, ui.crossRoad, ui.crossBuilding].forEach(r =>
+            r.addEventListener('change', (e) => { if (e.target.checked) { db.crossingObject = e.target.value; saveDb(); } })
+        );
+
+        /******************************************************************
+         * ПЕРЕКЛЮЧАТЕЛЬ ПЕРЕСЕЧЕНИЙ
+         ******************************************************************/
+        ui.crossingToggle.addEventListener('change', (e) => {
+            db.isCrossingEnabled = e.target.checked; updateToggleStatus(); updateCrossingFieldsState(); saveDb();
+            showNotification(e.target.checked ? '✅ Пересечения включены' : '⚠️ Пересечения отключены', e.target.checked ? 'success' : 'warning');
+        });
+        shadow.querySelector('#toggleCrossing').addEventListener('click', (e) => {
+            if (e.target === ui.crossingToggle || e.target.classList.contains('toggle-slider')) return;
+            ui.crossingToggle.checked = !ui.crossingToggle.checked;
+            db.isCrossingEnabled = ui.crossingToggle.checked; updateToggleStatus(); updateCrossingFieldsState(); saveDb();
+            showNotification(ui.crossingToggle.checked ? '✅ Пересечения включены' : '⚠️ Пересечения отключены', ui.crossingToggle.checked ? 'success' : 'warning');
+        });
+
+        /******************************************************************
+         * ПЕРЕКЛЮЧЕНИЕ ПРЕСЕТОВ
+         ******************************************************************/
+        ui.presetSelect.addEventListener('change', (e) => { db.activeId = e.target.value; saveDb(); updateUI(); showNotification('Пресет изменён', 'success'); });
+
+        /******************************************************************
+         * КНОПКИ УПРАВЛЕНИЯ ПРЕСЕТАМИ
+         ******************************************************************/
+        ui.btnAddPreset.addEventListener('click', () => { ui.inputNewPresetName.value = ''; showModal(ui.modalAddPreset); setTimeout(() => ui.inputNewPresetName.focus(), 100); });
+        ui.btnCancelAdd.addEventListener('click', () => hideModal(ui.modalAddPreset));
+        ui.btnConfirmAdd.addEventListener('click', () => {
+            const n = ui.inputNewPresetName.value.trim();
+            if (!n) { showNotification('⚠️ Введите название пресета!', 'warning'); return; }
+            createPreset(n); hideModal(ui.modalAddPreset);
+        });
+        ui.inputNewPresetName.addEventListener('keypress', (e) => { if (e.key === 'Enter') ui.btnConfirmAdd.click(); });
+
+        ui.btnEditPreset.addEventListener('click', () => { ui.inputEditPresetName.value = getActive().name; showModal(ui.modalEditPreset); setTimeout(() => { ui.inputEditPresetName.focus(); ui.inputEditPresetName.select(); }, 100); });
+        ui.btnCancelEdit.addEventListener('click', () => hideModal(ui.modalEditPreset));
+        ui.btnConfirmEdit.addEventListener('click', () => {
+            const n = ui.inputEditPresetName.value.trim();
+            if (!n) { showNotification('⚠️ Введите название пресета!', 'warning'); return; }
+            renamePreset(n); hideModal(ui.modalEditPreset);
+        });
+        ui.inputEditPresetName.addEventListener('keypress', (e) => { if (e.key === 'Enter') ui.btnConfirmEdit.click(); });
+
+        ui.btnDeletePreset.addEventListener('click', () => { ui.deletePresetName.textContent = getActive().name; showModal(ui.modalDeletePreset); });
+        ui.btnCancelDelete.addEventListener('click',  () => hideModal(ui.modalDeletePreset));
+        ui.btnConfirmDelete.addEventListener('click', () => { deletePreset(); hideModal(ui.modalDeletePreset); });
+
+        [ui.modalAddPreset, ui.modalEditPreset, ui.modalDeletePreset, ui.modalWireBinding, ui.modalAnchorType].forEach(m =>
+            m.addEventListener('click', (e) => { if (e.target === m) hideModal(m); })
+        );
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') [ui.modalAddPreset, ui.modalEditPreset, ui.modalDeletePreset, ui.modalWireBinding, ui.modalAnchorType].forEach(hideModal);
+        });
+
+        /******************************************************************
+         * СКАНИРОВАНИЕ САЙТА
+         ******************************************************************/
+        ui.btnScan.addEventListener('click', async () => {
+            ui.btnScan.disabled = true;
+            ui.btnScan.innerHTML = '<span>⏳</span><span>Сканирую...</span>';
+            try {
+                const data = scanSiteData();
+                const preset = getActive();
+                let updated = false;
+                if (data.wireBrand && data.wireBrand !== '...')    { preset.wireBrand    = data.wireBrand;    updated = true; }
+                if (data.fastening)                                 { db.fastening        = data.fastening;    updated = true; }
+                if (data.terrain)                                   { preset.terrain      = data.terrain;      updated = true; }
+                if (data.roadType)                                  { preset.roadType     = data.roadType;     updated = true; }
+                if (data.construction)                              { preset.construction = data.construction; updated = true; }
+                if (data.crossingObject)                            { db.crossingObject   = data.crossingObject; updated = true; }
+                if (data.wireLength)                                { db.wireLength       = data.wireLength;   updated = true; }
+                if (updated) { saveDb(); updateUI(); showNotification('✅ Данные успешно считаны с формы!', 'success'); }
+                else showNotification('⚠️ Не удалось найти данные на странице', 'warning');
+            } catch (err) {
+                console.error(err);
+                showNotification('❌ Ошибка при сканировании', 'error');
+                alert(`[KOLUS] ❌ Критическая ошибка при сканировании формы:\n\n${err.message}\n\nСм. консоль (F12) для подробностей.`);
+            } finally {
+                ui.btnScan.disabled = false;
+                ui.btnScan.innerHTML = '<span>🔍</span><span>Сканировать</span>';
+            }
+        });
+
+        /******************************************************************
+         * ЗАПОЛНЕНИЕ ФОРМЫ
+         ******************************************************************/
+        ui.btnFill.addEventListener('click', async () => {
+            const preset = getActive();
+            if (db.wireLength && parseFloat(db.wireLength) < 0) { showNotification('⚠️ Буксин не шали!', 'warning'); return; }
+            if (!preset.wireBrand) { showNotification('⚠️ Укажите марку провода!', 'warning'); return; }
+            if (!db.fastening)     { showNotification('⚠️ Выберите способ крепления!', 'warning'); return; }
+
+            if (db.fastening === 'Анкерное') {
+                if (isWireTypeAorAC(preset.wireBrand)) {
+                    ui.anchorOptions.innerHTML = `
+                        <div class="radio-group" style="flex-direction:column;">
+                            <div class="radio-option" style="min-width:100%;"><input type="radio" class="radio-input" id="anchorBindingEnd"     name="anchorType" value="Вязка концевая"  checked><label class="radio-label" for="anchorBindingEnd"    style="font-size:11px;"><span class="radio-dot"></span><span>Вязка концевая</span></label></div>
+                            <div class="radio-option" style="min-width:100%;"><input type="radio" class="radio-input" id="anchorBindingThrough" name="anchorType" value="Вязка проходная">       <label class="radio-label" for="anchorBindingThrough" style="font-size:11px;"><span class="radio-dot"></span><span>Вязка проходная</span></label></div>
+                        </div>`;
+                } else {
+                    ui.anchorOptions.innerHTML = `
+                        <div class="radio-group" style="flex-direction:column;">
+                            <div class="radio-option" style="min-width:100%;"><input type="radio" class="radio-input" id="anchorClamp" name="anchorType" value="Зажим анкерный клиновой" checked><label class="radio-label" for="anchorClamp" style="font-size:11px;"><span class="radio-dot"></span><span>Зажим анкерный клиновой</span></label></div>
+                            <div class="radio-option" style="min-width:100%;"><input type="radio" class="radio-input" id="anchorBolt"  name="anchorType" value="Болтовой зажим">                  <label class="radio-label" for="anchorBolt"  style="font-size:11px;"><span class="radio-dot"></span><span>Болтовой зажим</span></label></div>
+                        </div>`;
+                }
+                ui.btnConfirmAnchor.disabled = false;
+                showModal(ui.modalAnchorType);
+                return;
+            }
+
+            if (isWireTypeAorAC(preset.wireBrand)) {
+                ui.wireTypeDisplay.textContent    = preset.wireBrand;
+                ui.fasteningTypeDisplay.textContent = db.fastening || '—';
+                (db.fastening === 'Поддерживающее' ? ui.bindingThrough : ui.bindingEnd).checked = true;
+                showModal(ui.modalWireBinding);
+                return;
+            }
+
+            await performFill();
+        });
+
+        ui.btnCancelBinding.addEventListener('click',  () => hideModal(ui.modalWireBinding));
+        ui.btnConfirmBinding.addEventListener('click', async () => {
+            const sel = ui.bindingEnd.checked ? 'Вязка концевая' : 'Вязка проходная';
+            hideModal(ui.modalWireBinding);
+            await performFill(sel);
+        });
+
+        ui.btnCancelAnchor.addEventListener('click', () => { hideModal(ui.modalAnchorType); ui.btnConfirmAnchor.disabled = false; });
+        ui.btnConfirmAnchor.addEventListener('click', async () => {
+            const r = shadow.querySelector('input[name="anchorType"]:checked');
+            if (!r) { showNotification('⚠️ Выберите тип крепления!', 'warning'); return; }
+            hideModal(ui.modalAnchorType); ui.btnConfirmAnchor.disabled = false;
+            await performFill(null, r.value);
+        });
+
+        async function performFill(wireTension = null, anchorType = null) {
+            ui.btnFill.disabled = true;
+            ui.btnFill.innerHTML = '<span>⏳</span><span>Заполняю...</span>';
+            try {
+                const preset      = getActive();
+                const construction = ui.constructionKL.checked ? 'КЛ' : 'ВЛ';
+                const roadType     = ui.roadGround.checked ? 'Грунтовая' : 'Асфальтовая';
+                const fastening    = db.fastening || 'Натяжное';
+
+                console.log('[KOLUS DEBUG 1] performFill start');
+
+                // ── Поле designation ──────────────────────────────────────
+                const designationInput = await waitForInput('input[name="designation"]');
+                if (!designationInput) {
+                    throw new Error('Не найдено поле "designation" на странице. Возможно, форма ещё не загрузилась.');
+                }
+                setReactInputValue(designationInput, preset.designation || 'магистраль');
+                console.log('[KOLUS DEBUG 2] designation done');
+
+                // ── Логика марки провода ───────────────────────────────────
+                const wireEl = document.querySelector('fieldset[name="cableType"] .smwb-select-field span') ||
+                               document.querySelector('input[name="cableType"]');
+                const siteWireRaw = wireEl ? (wireEl.textContent || wireEl.value || '') : '';
+                const siteWire = siteWireRaw.trim().replace(/\u00a0/g, '').replace(/\s+/g, ' ');
+                const hasPlaceholderClass = wireEl && (
+                    wireEl.closest('.smwb-select-field')?.classList.contains('smwb-select-field--placeholder') ||
+                    wireEl.classList.contains('smwb-select-field__placeholder')
+                );
+                const siteWireIsEmpty = !siteWire || siteWire === '...' || siteWire.length <= 2 || hasPlaceholderClass;
+
+                if (siteWireIsEmpty) {
+                    console.log('🔌 KOLUS: Марка не выбрана на сайте → вставляем из пресета:', preset.wireBrand);
+                    try {
+                        const ok = await selectWireBrandReact(preset.wireBrand);
+                        if (!ok) {
+                            showNotification('⚠️ Не удалось выбрать марку провода', 'warning');
+                            alert(`[KOLUS] ⚠️ Не удалось выбрать марку провода "${preset.wireBrand}" из списка.\n\nПроверьте, что такая марка существует в выпадающем списке на сайте.`);
+                        }
+                    } catch (wireErr) {
+                        console.error('⚠️ KOLUS: Ошибка при выборе марки:', wireErr);
+                        showNotification('⚠️ Не удалось выбрать марку провода', 'warning');
+                        alert(`[KOLUS] ❌ Ошибка при выборе марки провода:\n\n${wireErr.message}`);
+                    }
+                } else if (wireMatches(siteWire, preset.wireBrand)) {
+                    console.log('⏭️ KOLUS: Марка совпадает (' + siteWire + ') → пропускаем');
+                } else {
+                    const msg = `Марка на сайте (${siteWire}) отличается от пресета (${preset.wireBrand})!\n\nЗаполнение прервано.`;
+                    showNotification('⚠️ ' + msg.split('\n')[0], 'warning');
+                    alert('[KOLUS] ⚠️ ' + msg);
+                    return;
+                }
+
+                console.log('[KOLUS DEBUG 3] wire done, continuing...');
+                await sleep(200);
+
+                // ── НОВАЯ ЛОГИКА: Для СИП 2х16 фазы=1, провода в фазе=1 ──
+                console.log('[KOLUS DEBUG 4] phaseCount...');
+                const phaseInput = await waitForInput('input[name="phaseCount"]');
+                if (!phaseInput) throw new Error('Не найдено поле "phaseCount". Форма могла не загрузиться полностью.');
+
+                const isSIP2 = isSIP2x16(preset.wireBrand);
+                if (isSIP2) {
+                    console.log('🔌 KOLUS: Обнаружен СИП 2х16 → фазы=1, провода в фазе=1');
+                    setReactInputValue(phaseInput, '1');
+                } else {
+                    setReactInputValue(phaseInput, '3');
+                }
+
+                console.log('[KOLUS DEBUG 5] wireCountInPhase...');
+                const wireCountInput = await waitForInput('input[name="wireCountInPhase"]');
+                if (wireCountInput) {
+                    setReactInputValue(wireCountInput, '1');
+                }
+
+                console.log('[KOLUS DEBUG 6] construction...');
+                setReactInputValue(await waitForInput('input[name="construction"]'), construction);
+
+                console.log('[KOLUS DEBUG 7] fastening...');
+                setReactInputValue(await waitForInput('input[name="fastening.type"]'), fastening);
+
+                console.log('[KOLUS DEBUG 8] areaType...');
+                setReactInputValue(await waitForInput('input[name="areaType"]'), preset.terrain);
+                console.log('[KOLUS DEBUG 9] areaType done');
+
+                console.log('📏 KOLUS: Габарит:', db.clearance);
+                setReactInputValue(await waitForInput('input[name="overallDimension.height"]'), db.clearance);
+
+                const tension = anchorType || wireTension ||
+                    (fastening === 'Натяжное' ? 'Зажим натяжной клиновой' : 'Зажим поддерживающий');
+                setReactInputValue(await waitForInput('input[name="wireTension"]'), tension);
+                setReactInputValue(await waitForInput('input[name="roadType"]'), roadType);
+
+                if (db.wireLength) {
+                    const li = await waitForInput('input[name*="length"]') ||
+                               await waitForInput('input[name*="wireLength"]') ||
+                               await waitForInput('input[name*="cableLength"]');
+                    if (li) setReactInputValue(li, db.wireLength);
+                }
+
+                // ── НОВАЯ ЛОГИКА: Заполнение количества муфт ──
+                if (db.couplingCount && parseInt(db.couplingCount) > 0) {
+                    console.log('🔌 KOLUS: Заполняю количество муфт:', db.couplingCount);
+                    const couplingInput = await waitForInput('input[name*="coupling"]') ||
+                                         await waitForInput('input[name*="муфт"]') ||
+                                         await waitForInput('input[name*="muff"]');
+                    if (couplingInput) {
+                        setReactInputValue(couplingInput, db.couplingCount);
+                    } else {
+                        console.warn('⚠️ KOLUS: Поле для муфт не найдено на странице');
+                    }
+                }
+
+                if (construction === 'ВЛ' && db.isCrossingEnabled) {
+                    const cb = document.querySelector('input[name="crossing.exists"]');
+                    if (cb && !cb.checked) cb.click();
+                    await sleep(200);
+                    setReactInputValue(await waitForInput('input[name="crossing.type"]'),   'воздушный переход');
+                    setReactInputValue(await waitForInput('input[name="crossing.object"]'), db.crossingObject);
+                } else {
+                    const cb = document.querySelector('input[name="crossing.exists"]');
+                    if (cb && cb.checked) cb.click();
+                }
+
+                await sleep(300);
+                const cards = [...document.querySelectorAll('.smwb-card')];
+                for (const title of ['Габарит над землей', 'Способ крепления на опоре']) {
+                    const card = cards.find(c => c.querySelector('.smwb-card__title')?.textContent.includes(title));
+                    if (!card) continue;
+                    const photoGrid = card.querySelector('[name$="photoUrls"]');
+                    if (photoGrid?.querySelectorAll('img,video').length > 0) continue;
+                    const btn = card.querySelector('button.smwb-fab');
+                    if (btn) ['mousedown', 'mouseup', 'click'].forEach(t =>
+                        btn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))
+                    );
+                }
+
+                showNotification('✅ Форма успешно заполнена!', 'success');
+
+            } catch (err) {
+                console.error('❌ KOLUS: Критическая ошибка заполнения:', err);
+                console.trace();
+                showNotification('❌ Критическая ошибка при заполнении', 'error');
+                alert(
+                    `[KOLUS v1.6.0] ❌ Критическая ошибка при заполнении формы!\n\n` +
+                    `Ошибка: ${err.message}\n\n` +
+                    `Стек:\n${err.stack || 'недоступен'}\n\n` +
+                    `Пресет: ${getActive().name}\n` +
+                    `Марка: ${getActive().wireBrand}\n` +
+                    `Крепление: ${db.fastening}\n\n` +
+                    `Откройте консоль (F12 → Console) для подробностей.`
+                );
+            } finally {
+                ui.btnFill.disabled = false;
+                ui.btnFill.innerHTML = '<span>✨</span><span>Заполнить</span>';
+            }
+        }
+
+        /******************************************************************
+         * МИНИМИЗАЦИЯ ОКНА
+         ******************************************************************/
+        ui.btnMinimize.addEventListener('click', () => {
+            db.isCollapsed = !db.isCollapsed;
+            ui.body.style.display = db.isCollapsed ? 'none' : 'flex';
+            ui.collapsedInfo.classList.toggle('visible', db.isCollapsed);
+            ui.btnMinimize.textContent = db.isCollapsed ? '+' : '−';
+            saveDb();
+        });
+
+        /******************************************************************
+         * ПЕРЕТАСКИВАНИЕ
+         ******************************************************************/
+        let isDragging = false, offsetX, offsetY;
+        shadow.querySelector('#dragHandle').addEventListener('mousedown', (e) => {
+            isDragging = true; offsetX = e.clientX - ui.main.offsetLeft; offsetY = e.clientY - ui.main.offsetTop; ui.main.style.cursor = 'grabbing';
+        });
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) { ui.main.style.left = (e.clientX - offsetX) + 'px'; ui.main.style.top = (e.clientY - offsetY) + 'px'; }
+        });
+        document.addEventListener('mouseup', () => {
+            if (isDragging) { isDragging = false; ui.main.style.cursor = ''; db.pos = { x: parseInt(ui.main.style.left), y: parseInt(ui.main.style.top) }; saveDb(); }
+        });
+
+        /******************************************************************
+         * МОНИТОРИНГ МАРКИ ПРОВОДА
+         ******************************************************************/
+        function monitorWire() {
+            try {
+                const wireEl    = document.querySelector('fieldset[name="cableType"] .smwb-select-field span') || document.querySelector('input[name="cableType"]');
+                const siteWire  = wireEl ? (wireEl.textContent || wireEl.value || '').trim() : '';
+                const presetWire = ui.inputWireBrand.value.trim();
+
+                function updateWireStatus(el, wire, preset) {
+                    if (!wire || wire === '...') {
+                        el.textContent = 'Пусто';
+                        el.className = el.className.replace(/match-\w+/g, '') + ' match-yellow';
+                        return false;
+                    } else if (wireMatches(wire, preset)) {
+                        el.textContent = wire;
+                        el.className = el.className.replace(/match-\w+/g, '') + ' match-green';
+                        return true;
+                    } else {
+                        el.textContent = wire;
+                        el.className = el.className.replace(/match-\w+/g, '') + ' match-red';
+                        return false;
+                    }
+                }
+
+                updateWireStatus(ui.statusWire,    siteWire, presetWire);
+                updateWireStatus(ui.collapsedWire, siteWire, presetWire);
+
+                const siteWireIsEmpty = !siteWire || siteWire === '...' || siteWire.length <= 2;
+                const brandMismatch = !siteWireIsEmpty && !wireMatches(siteWire, presetWire);
+                ui.btnFill.disabled = !presetWire || brandMismatch;
+                if (brandMismatch) {
+                    ui.btnFill.style.opacity = '0.4';
+                    ui.btnFill.title = `Марка на сайте (${siteWire}) ≠ пресет (${presetWire})`;
+                } else {
+                    ui.btnFill.style.opacity = '';
+                    ui.btnFill.title = '';
+                }
+            } catch (e) { /* ignore */ }
+            requestAnimationFrame(monitorWire);
+        }
+
+        /******************************************************************
+         * DISCORD
+         ******************************************************************/
+        ui.discordLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.open('https://discord.gg/RC6HhTqCdR', '_blank');
+        });
+
+        /******************************************************************
+         * ИНИЦИАЛИЗАЦИЯ
+         ******************************************************************/
+        ui.main.style.left = db.pos.x + 'px';
+        ui.main.style.top  = db.pos.y + 'px';
+        if (db.isCollapsed) {
+            ui.body.style.display = 'none';
+            ui.collapsedInfo.classList.add('visible');
+            ui.btnMinimize.textContent = '+';
+        }
+
+        updateUI();
+        monitorWire();
+
+        console.log('✅ KOLUS v1.6.0 готов к работе! | Created by KAST Team');
+        document.getElementById('kolus-ui-host').style.display = db.isVisible ? 'block' : 'none';
+    }
+
+    /******************************************************************
+     * УПРАВЛЕНИЕ ВИДИМОСТЬЮ UI
+     ******************************************************************/
+    function showUI() {
+        const h = document.getElementById('kolus-ui-host');
+        if (h) { h.style.display = 'block'; console.log('✅ KOLUS: UI показан'); }
+    }
+    function hideUI() {
+        const h = document.getElementById('kolus-ui-host');
+        if (h) { h.style.display = 'none'; console.log('🙈 KOLUS: UI скрыт'); }
+    }
+    function toggleUI() {
+        window.kolusManuallyHidden = !window.kolusManuallyHidden;
+        if (window.kolusManuallyHidden) {
+            hideUI();
+            showNotificationGlobal('🙈 KOLUS скрыт. ALT + З для показа', 'warning');
+        } else if (isWireForm()) {
+            showUI();
+            showNotificationGlobal('✅ KOLUS показан. ALT + З для скрытия', 'success');
+        }
+    }
+    function showNotificationGlobal(message, type = 'success') {
+        const n = document.createElement('div');
+        n.style.cssText = `position:fixed;top:20px;right:20px;background:${type==='success'?'linear-gradient(135deg,rgba(22,163,74,0.95),rgba(0,0,0,0.95))':'linear-gradient(135deg,rgba(234,179,8,0.95),rgba(0,0,0,0.95))'};border:1px solid ${type==='success'?'rgba(34,197,94,0.5)':'rgba(234,179,8,0.5)'};border-radius:12px;padding:16px 20px;color:#fff;font-size:13px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;z-index:1000001;box-shadow:0 10px 30px rgba(0,0,0,0.5);max-width:300px;`;
+        n.textContent = message;
+        document.body.appendChild(n);
+        setTimeout(() => { setTimeout(() => n.remove(), 300); }, 3000);
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.altKey && e.key.toLowerCase() === 'з') { e.preventDefault(); toggleUI(); }
+    });
+
+    console.log('🚀 KOLUS v1.6.0 загружается...');
+    console.log('💡 Горячая клавиша: ALT + З - показать/скрыть UI');
+
+    window.kolusManuallyHidden = false;
+    startFormObserver();
+})();
