@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KOLUS - Умный помощник заполнения форм
 // @namespace    kolus.ultimate
-// @version      1.6.0
+// @version      1.6.1
 // @description  Интеллектуальный помощник заполнения форм с автодополнением и умным сканированием | Created by KAST Team
 // @match        https://moe2.agentumit.ru/*
 // @grant        none
@@ -10,7 +10,7 @@
 (function() {
     'use strict';
 
-    console.log('🚀 KOLUS v1.6.0 загружен | Created by KAST Team');
+    console.log('🚀 KOLUS v1.6.1 загружен | Created by KAST Team');
 
     const STORAGE_KEY = 'kolus_ultimate_v1';
 
@@ -43,7 +43,7 @@
         clearance: '5.0',
         fastening: 'Натяжное',
         crossingObject: 'Дерево',
-        couplingCount: '0',  // Добавлено: количество муфт
+        couplingCount: '0',
         presets: [
             { id: 'p1', name: '⚡ СИП Натяжка',  wireBrand: 'СИП 4х50', roadType: 'Асфальтовая', construction: 'ВЛ', terrain: 'населенная местность', designation: 'магистраль' },
             { id: 'p2', name: '🔧 СИП Поддержка', wireBrand: 'СИП 4х50', roadType: 'Асфальтовая', construction: 'ВЛ', terrain: 'населенная местность', designation: 'магистраль' },
@@ -68,7 +68,7 @@
         db.crossingObject = (firstPreset && firstPreset.crossingObject) || 'Дерево';
     }
     if (db.clearance === undefined) db.clearance = '5.0';
-    if (db.couplingCount === undefined) db.couplingCount = '0';  // Миграция для нового поля
+    if (db.couplingCount === undefined) db.couplingCount = '0';
     if (db.presets && db.presets.length > 0) {
         db.presets = db.presets.map(p => {
             if (Array.isArray(p.fastenings)) delete p.fastenings;
@@ -147,7 +147,6 @@
         return isWireTypeA(wireBrand) || isWireTypeAC(wireBrand);
     }
 
-    // НОВАЯ ФУНКЦИЯ: Проверка на СИП 2х16
     function isSIP2x16(wireBrand) {
         if (!wireBrand) return false;
         const normalized = wireBrand.trim().toUpperCase().replace(/\s+/g, '').replace(/[-_]/g, '');
@@ -235,7 +234,6 @@
      * НАБЛЮДАТЕЛЬ ЗА ФОРМОЙ (авто show/hide)
      ******************************************************************/
     function startFormObserver() {
-        // Инициализируем UI один раз (скрытым)
         initializeUI();
 
         function checkFormPresence() {
@@ -249,16 +247,13 @@
             }
         }
 
-        // Первичная проверка
         checkFormPresence();
-
-        // Следим за изменениями DOM
         const observer = new MutationObserver(() => checkFormPresence());
         observer.observe(document.body, { childList: true, subtree: true });
     }
 
     /******************************************************************
-     * UI (SHADOW DOM)
+     * UI (SHADOW DOM) - КОМПАКТНАЯ ВЕРСИЯ
      ******************************************************************/
     function initializeUI() {
         if (window.kolusUIInitialized) { console.log('⚠️ KOLUS: UI уже инициализирован'); return; }
@@ -273,44 +268,44 @@
         @keyframes slideIn { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        .root { position: fixed; width: 360px; background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%); border-radius: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; z-index: 1000000; box-shadow: 0 25px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1); color: #fff; overflow: hidden; animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); transform-origin: top left; display: flex; flex-direction: column; max-height: 90vh; }
-        .header { background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); padding: 14px 16px; cursor: move; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); user-select: none; flex-shrink: 0; }
-        .header-title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; letter-spacing: 0.5px; }
-        .header-icon { width: 20px; height: 20px; background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
-        .header-controls { display: flex; gap: 8px; align-items: center; }
-        .header-btn { width: 28px; height: 28px; border-radius: 6px; background: rgba(255,255,255,0.1); border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 16px; line-height: 1; }
+        .root { position: fixed; width: 340px; background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%); border-radius: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; z-index: 1000000; box-shadow: 0 20px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1); color: #fff; overflow: hidden; animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); transform-origin: top left; display: flex; flex-direction: column; max-height: 90vh; }
+        .header { background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); padding: 8px 12px; cursor: move; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); user-select: none; flex-shrink: 0; }
+        .header-title { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px; letter-spacing: 0.3px; }
+        .header-icon { width: 18px; height: 18px; background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+        .header-controls { display: flex; gap: 6px; align-items: center; }
+        .header-btn { width: 24px; height: 24px; border-radius: 5px; background: rgba(255,255,255,0.1); border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 14px; line-height: 1; }
         .header-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
-        .collapsed-info { padding: 12px 16px; display: none; flex-direction: column; gap: 8px; background: rgba(0,0,0,0.2); }
+        .collapsed-info { padding: 8px 12px; display: none; flex-direction: column; gap: 6px; background: rgba(0,0,0,0.2); }
         .collapsed-info.visible { display: flex; }
-        .collapsed-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
-        .collapsed-label { color: rgba(255,255,255,0.6); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
-        .collapsed-value { font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 5px; background: rgba(0,0,0,0.3); }
+        .collapsed-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+        .collapsed-label { color: rgba(255,255,255,0.6); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; font-size: 9px; }
+        .collapsed-value { font-weight: 700; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.3); }
         .collapsed-value.match-green { background: rgba(34,197,94,0.2); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
         .collapsed-value.match-red { background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
         .collapsed-value.match-yellow { background: rgba(234,179,8,0.2); color: #eab308; border: 1px solid rgba(234,179,8,0.3); animation: pulse 2s infinite; }
-        .body { padding: 16px; padding-bottom: 90px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex: 1; }
-        .body::-webkit-scrollbar { width: 6px; }
+        .body { padding: 10px 12px; padding-bottom: 70px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1; }
+        .body::-webkit-scrollbar { width: 5px; }
         .body::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 3px; }
         .body::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.5); border-radius: 3px; }
         .body::-webkit-scrollbar-thumb:hover { background: rgba(139,92,246,0.7); }
-        .status-panel { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-        .status-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
-        .status-label { color: rgba(255,255,255,0.6); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
-        .status-value { font-weight: 700; font-size: 13px; padding: 4px 10px; border-radius: 6px; background: rgba(0,0,0,0.3); transition: all 0.3s; }
+        .status-panel { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+        .status-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+        .status-label { color: rgba(255,255,255,0.6); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; font-size: 9px; }
+        .status-value { font-weight: 700; font-size: 11px; padding: 3px 8px; border-radius: 5px; background: rgba(0,0,0,0.3); transition: all 0.3s; }
         .status-value.match-green { background: rgba(34,197,94,0.2); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
         .status-value.match-red { background: rgba(239,68,68,0.2); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
         .status-value.match-yellow { background: rgba(234,179,8,0.2); color: #eab308; border: 1px solid rgba(234,179,8,0.3); animation: pulse 2s infinite; }
-        .divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent); margin: 4px 0; }
-        .field-group { display: flex; flex-direction: column; gap: 6px; }
-        .field-label { display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 0.5px; }
-        .field-label-icon { font-size: 14px; }
-        .field-input { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 10px 14px; color: #fff; font-size: 13px; transition: all 0.2s; outline: none; font-family: inherit; }
+        .divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent); margin: 2px 0; }
+        .field-group { display: flex; flex-direction: column; gap: 4px; }
+        .field-label { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 0.3px; }
+        .field-label-icon { font-size: 12px; }
+        .field-input { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 7px; padding: 7px 10px; color: #fff; font-size: 12px; transition: all 0.2s; outline: none; font-family: inherit; }
         .field-input::placeholder { color: rgba(255,255,255,0.4); }
-        .field-input:focus { border-color: rgba(139,92,246,0.6); background: rgba(0,0,0,0.4); box-shadow: 0 0 0 3px rgba(139,92,246,0.1); }
+        .field-input:focus { border-color: rgba(139,92,246,0.6); background: rgba(0,0,0,0.4); box-shadow: 0 0 0 2px rgba(139,92,246,0.1); }
         .field-input:disabled { opacity: 0.5; cursor: not-allowed; }
-        .preset-controls { display: flex; gap: 6px; }
+        .preset-controls { display: flex; gap: 5px; }
         .preset-controls .field-input { flex: 1; }
-        .preset-btn { width: 36px; height: 36px; border-radius: 8px; border: none; background: rgba(139,92,246,0.2); color: #8b5cf6; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: all 0.2s; flex-shrink: 0; }
+        .preset-btn { width: 30px; height: 30px; border-radius: 6px; border: none; background: rgba(139,92,246,0.2); color: #8b5cf6; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: all 0.2s; flex-shrink: 0; }
         .preset-btn:hover { background: rgba(139,92,246,0.3); transform: translateY(-1px); }
         .preset-btn.add { background: rgba(34,197,94,0.2); color: #22c55e; }
         .preset-btn.add:hover { background: rgba(34,197,94,0.3); }
@@ -318,86 +313,88 @@
         .preset-btn.delete:hover { background: rgba(239,68,68,0.3); }
         .preset-btn.edit { background: rgba(234,179,8,0.2); color: #eab308; }
         .preset-btn.edit:hover { background: rgba(234,179,8,0.3); }
-        .clearance-row { display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px; }
-        .clearance-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 0.5px; }
-        .clearance-controls { display: flex; align-items: center; gap: 8px; }
-        .clearance-input { width: 60px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 6px 10px; color: #fff; font-size: 14px; font-weight: 700; text-align: center; outline: none; }
-        .clearance-input:focus { border-color: rgba(139,92,246,0.6); box-shadow: 0 0 0 3px rgba(139,92,246,0.1); }
-        .clearance-btn { width: 28px; height: 28px; border-radius: 6px; border: none; background: rgba(139,92,246,0.2); color: #8b5cf6; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; transition: all 0.2s; }
-        .clearance-btn:hover { background: rgba(139,92,246,0.3); transform: scale(1.05); }
-        .radio-group { display: flex; gap: 6px; flex-wrap: wrap; }
-        .radio-option { flex: 1; min-width: calc(33.33% - 4px); }
+        .compact-row { display: flex; gap: 6px; }
+        .compact-row .field-group { flex: 1; }
+        .number-control { display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 6px 8px; }
+        .number-label { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 0.3px; }
+        .number-controls { display: flex; align-items: center; gap: 6px; }
+        .number-input { width: 50px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; padding: 4px 8px; color: #fff; font-size: 12px; font-weight: 700; text-align: center; outline: none; }
+        .number-input:focus { border-color: rgba(139,92,246,0.6); box-shadow: 0 0 0 2px rgba(139,92,246,0.1); }
+        .number-btn { width: 24px; height: 24px; border-radius: 5px; border: none; background: rgba(139,92,246,0.2); color: #8b5cf6; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; transition: all 0.2s; }
+        .number-btn:hover { background: rgba(139,92,246,0.3); transform: scale(1.05); }
+        .radio-group { display: flex; gap: 4px; flex-wrap: wrap; }
+        .radio-option { flex: 1; min-width: calc(33.33% - 3px); }
         .radio-input { display: none; }
-        .radio-label { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; cursor: pointer; transition: all 0.2s; font-size: 12px; font-weight: 500; }
+        .radio-label { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 7px; cursor: pointer; transition: all 0.2s; font-size: 11px; font-weight: 500; }
         .radio-label:hover { background: rgba(0,0,0,0.4); border-color: rgba(139,92,246,0.4); }
         .radio-input:checked + .radio-label { background: rgba(139,92,246,0.2); border-color: rgba(139,92,246,0.6); color: #a78bfa; }
-        .radio-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
-        .radio-input:checked + .radio-label .radio-dot { border-color: #8b5cf6; background: #8b5cf6; box-shadow: 0 0 0 3px rgba(139,92,246,0.2); }
-        .radio-input:checked + .radio-label .radio-dot::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #fff; }
-        .toggle-section { display: flex; align-items: center; gap: 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s; }
+        .radio-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.4); display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
+        .radio-input:checked + .radio-label .radio-dot { border-color: #8b5cf6; background: #8b5cf6; box-shadow: 0 0 0 2px rgba(139,92,246,0.2); }
+        .radio-input:checked + .radio-label .radio-dot::after { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #fff; }
+        .toggle-section { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; cursor: pointer; transition: all 0.2s; }
         .toggle-section:hover { background: rgba(0,0,0,0.4); }
-        .toggle-switch { position: relative; width: 50px; height: 26px; flex-shrink: 0; }
+        .toggle-switch { position: relative; width: 44px; height: 22px; flex-shrink: 0; }
         .toggle-input { display: none; }
-        .toggle-slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.2); border-radius: 13px; transition: 0.3s; cursor: pointer; }
-        .toggle-slider::before { content: ''; position: absolute; height: 20px; width: 20px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .toggle-slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.2); border-radius: 11px; transition: 0.3s; cursor: pointer; }
+        .toggle-slider::before { content: ''; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .toggle-input:checked + .toggle-slider { background: linear-gradient(135deg, #22c55e, #16a34a); }
-        .toggle-input:checked + .toggle-slider::before { transform: translateX(24px); }
-        .toggle-label { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; flex: 1; pointer-events: none; }
-        .toggle-status { margin-left: auto; font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .toggle-input:checked + .toggle-slider::before { transform: translateX(22px); }
+        .toggle-label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; flex: 1; pointer-events: none; }
+        .toggle-status { margin-left: auto; font-size: 9px; font-weight: 700; padding: 3px 6px; border-radius: 5px; text-transform: uppercase; letter-spacing: 0.3px; }
         .toggle-status.active { background: rgba(34,197,94,0.2); color: #22c55e; }
         .toggle-status.inactive { background: rgba(239,68,68,0.2); color: #ef4444; }
-        .crossing-fields { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; transition: all 0.3s; }
+        .crossing-fields { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; transition: all 0.3s; }
         .crossing-fields.hidden { opacity: 0; max-height: 0; overflow: hidden; margin-top: 0; pointer-events: none; }
-        .crossing-objects { display: flex; flex-wrap: wrap; gap: 6px; }
-        .crossing-obj-option { flex: 1; min-width: calc(50% - 3px); }
+        .crossing-objects { display: flex; flex-wrap: wrap; gap: 4px; }
+        .crossing-obj-option { flex: 1; min-width: calc(50% - 2px); }
         .crossing-obj-input { display: none; }
-        .crossing-obj-label { display: flex; align-items: center; justify-content: center; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; cursor: pointer; transition: all 0.2s; font-size: 11px; font-weight: 500; text-align: center; }
+        .crossing-obj-label { display: flex; align-items: center; justify-content: center; padding: 6px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 7px; cursor: pointer; transition: all 0.2s; font-size: 10px; font-weight: 500; text-align: center; }
         .crossing-obj-label:hover { background: rgba(0,0,0,0.4); border-color: rgba(139,92,246,0.4); }
         .crossing-obj-input:checked + .crossing-obj-label { background: rgba(139,92,246,0.2); border-color: rgba(139,92,246,0.6); color: #a78bfa; }
         .crossing-obj-input:disabled + .crossing-obj-label { opacity: 0.4; cursor: not-allowed; }
-        .footer { position: absolute; bottom: 0; left: 0; right: 0; padding: 16px; background: linear-gradient(180deg, transparent, rgba(0,0,0,0.4)); display: flex; gap: 8px; backdrop-filter: blur(10px); border-top: 1px solid rgba(255,255,255,0.1); }
-        .btn { flex: 1; padding: 12px 20px; border: none; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; font-family: inherit; }
+        .footer { position: absolute; bottom: 0; left: 0; right: 0; padding: 10px 12px; background: linear-gradient(180deg, transparent, rgba(0,0,0,0.4)); display: flex; gap: 6px; backdrop-filter: blur(10px); border-top: 1px solid rgba(255,255,255,0.1); }
+        .btn { flex: 1; padding: 9px 16px; border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; font-family: inherit; }
         .btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .btn:disabled:hover { transform: none; }
-        .btn-fill { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff; box-shadow: 0 4px 12px rgba(139,92,246,0.3); }
-        .btn-fill:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(139,92,246,0.4); }
+        .btn-fill { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff; box-shadow: 0 3px 10px rgba(139,92,246,0.3); }
+        .btn-fill:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(139,92,246,0.4); }
         .btn-scan { background: linear-gradient(135deg, rgba(34,197,94,0.2), rgba(34,197,94,0.3)); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
         .btn-scan:hover:not(:disabled) { background: linear-gradient(135deg, rgba(34,197,94,0.3), rgba(34,197,94,0.4)); transform: translateY(-1px); }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); align-items: center; justify-content: center; z-index: 1000001; animation: slideIn 0.2s ease-out; }
-        .modal { background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%); border-radius: 16px; padding: 24px; width: 90%; max-width: 360px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
-        .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; color: #fff; display: flex; align-items: center; gap: 8px; }
-        .modal-content { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
-        .modal-text { font-size: 14px; color: rgba(255,255,255,0.8); line-height: 1.5; }
+        .modal { background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%); border-radius: 12px; padding: 20px; width: 90%; max-width: 340px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); }
+        .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 12px; color: #fff; display: flex; align-items: center; gap: 6px; }
+        .modal-content { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+        .modal-text { font-size: 13px; color: rgba(255,255,255,0.8); line-height: 1.5; }
         .modal-highlight { color: #8b5cf6; font-weight: 600; }
-        .modal-buttons { display: flex; gap: 8px; }
-        .modal-btn { flex: 1; padding: 12px 20px; border: none; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+        .modal-buttons { display: flex; gap: 6px; }
+        .modal-btn { flex: 1; padding: 9px 16px; border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
         .modal-btn-primary { background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff; }
-        .modal-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(139,92,246,0.4); }
+        .modal-btn-primary:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(139,92,246,0.4); }
         .modal-btn-secondary { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); }
         .modal-btn-secondary:hover { background: rgba(255,255,255,0.15); }
-        .suggestions { margin-top: 6px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; overflow: hidden; max-height: 200px; overflow-y: auto; animation: slideIn 0.2s ease-out; }
-        .suggestions-title { padding: 8px 12px; font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.5px; background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .suggestions { margin-top: 4px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 7px; overflow: hidden; max-height: 180px; overflow-y: auto; animation: slideIn 0.2s ease-out; }
+        .suggestions-title { padding: 6px 10px; font-size: 9px; font-weight: 600; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.3px; background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.1); }
         .suggestions-list { display: flex; flex-direction: column; }
-        .suggestion-item { padding: 10px 12px; font-size: 13px; color: rgba(255,255,255,0.9); cursor: pointer; transition: all 0.15s; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .suggestion-item { padding: 8px 10px; font-size: 12px; color: rgba(255,255,255,0.9); cursor: pointer; transition: all 0.15s; border-bottom: 1px solid rgba(255,255,255,0.05); }
         .suggestion-item:last-child { border-bottom: none; }
         .suggestion-item:hover { background: rgba(139,92,246,0.2); color: #a78bfa; }
-        .notification { position: fixed; top: 20px; right: 20px; background: linear-gradient(135deg, rgba(34,197,94,0.95), rgba(0,0,0,0.95)); border: 1px solid rgba(34,197,94,0.5); border-radius: 12px; padding: 14px 18px; color: #fff; font-size: 13px; font-weight: 600; z-index: 1000002; box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: slideIn 0.3s ease-out; max-width: 300px; }
+        .notification { position: fixed; top: 20px; right: 20px; background: linear-gradient(135deg, rgba(34,197,94,0.95), rgba(0,0,0,0.95)); border: 1px solid rgba(34,197,94,0.5); border-radius: 10px; padding: 12px 16px; color: #fff; font-size: 12px; font-weight: 600; z-index: 1000002; box-shadow: 0 8px 24px rgba(0,0,0,0.5); animation: slideIn 0.3s ease-out; max-width: 280px; }
         .notification-warning { background: linear-gradient(135deg, rgba(234,179,8,0.95), rgba(0,0,0,0.95)); border-color: rgba(234,179,8,0.5); }
         .notification-error { background: linear-gradient(135deg, rgba(239,68,68,0.95), rgba(0,0,0,0.95)); border-color: rgba(239,68,68,0.5); }
-        .discord-link { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; background: rgba(88,101,242,0.2); border: 1px solid rgba(88,101,242,0.3); border-radius: 10px; color: #5865f2; font-size: 11px; font-weight: 600; text-decoration: none; transition: all 0.2s; margin-top: 12px; }
+        .discord-link { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 6px 10px; background: rgba(88,101,242,0.2); border: 1px solid rgba(88,101,242,0.3); border-radius: 7px; color: #5865f2; font-size: 10px; font-weight: 600; text-decoration: none; transition: all 0.2s; margin-top: 8px; }
         .discord-link:hover { background: rgba(88,101,242,0.3); transform: translateY(-1px); }
-        .scale-controls { display: flex; align-items: center; gap: 6px; }
-        .scale-btn { width: 24px; height: 24px; border-radius: 5px; border: none; background: rgba(255,255,255,0.1); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; transition: all 0.2s; }
+        .scale-controls { display: flex; align-items: center; gap: 4px; }
+        .scale-btn { width: 20px; height: 20px; border-radius: 4px; border: none; background: rgba(255,255,255,0.1); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; transition: all 0.2s; }
         .scale-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
-        .scale-value { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.8); min-width: 36px; text-align: center; }
-        .settings-bar { display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px; }
-        .settings-bar-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 0.5px; }
-        .settings-toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+        .scale-value { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.8); min-width: 32px; text-align: center; }
+        .settings-bar { display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; }
+        .settings-bar-label { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 0.3px; }
+        .settings-toggle { position: relative; width: 38px; height: 20px; flex-shrink: 0; }
         .settings-toggle-input { display: none; }
-        .settings-toggle-slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.2); border-radius: 12px; transition: 0.3s; cursor: pointer; }
-        .settings-toggle-slider::before { content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .settings-toggle-slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.2); border-radius: 10px; transition: 0.3s; cursor: pointer; }
+        .settings-toggle-slider::before { content: ''; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .settings-toggle-input:checked + .settings-toggle-slider { background: linear-gradient(135deg, #22c55e, #16a34a); }
-        .settings-toggle-input:checked + .settings-toggle-slider::before { transform: translateX(20px); }
+        .settings-toggle-input:checked + .settings-toggle-slider::before { transform: translateX(18px); }
         .root.compact { max-height: none; }
         .root.compact .body { max-height: none; overflow-y: visible; }
         `;
@@ -407,7 +404,7 @@
             <div class="header" id="dragHandle">
                 <div class="header-title">
                     <div class="header-icon">⚡</div>
-                    <span>KOLUS v1.6.0</span>
+                    <span>KOLUS v1.6.1</span>
                 </div>
                 <div class="header-controls">
                     <div class="scale-controls">
@@ -422,11 +419,11 @@
 
             <div class="collapsed-info" id="collapsedInfo">
                 <div class="collapsed-row">
-                    <span class="collapsed-label">📡 Марка на сайте</span>
+                    <span class="collapsed-label">📡 Марка</span>
                     <span class="collapsed-value match-yellow" id="collapsedWire">...</span>
                 </div>
                 <div class="collapsed-row">
-                    <span class="collapsed-label">🎯 Активный пресет</span>
+                    <span class="collapsed-label">🎯 Пресет</span>
                     <span class="collapsed-value" id="collapsedPreset" style="color:#8b5cf6;">—</span>
                 </div>
             </div>
@@ -438,30 +435,26 @@
                         <span class="status-value match-yellow" id="statusWire">...</span>
                     </div>
                     <div class="status-row">
-                        <span class="status-label">📋 Активный пресет</span>
+                        <span class="status-label">🎯 Пресет</span>
                         <span class="status-value" id="statusPreset" style="color:#8b5cf6;">—</span>
                     </div>
                 </div>
 
                 <div class="field-group">
-                    <label class="field-label">
-                        <span class="field-label-icon">🎯</span>
-                        Пресет конфигурации
-                    </label>
+                    <label class="field-label"><span class="field-label-icon">🎯</span>Пресет</label>
                     <div class="preset-controls">
                         <select class="field-input" id="presetSelect"></select>
-                        <button class="preset-btn add"    id="btnAddPreset"    title="Создать пресет">+</button>
-                        <button class="preset-btn edit"   id="btnEditPreset"   title="Редактировать">✏️</button>
+                        <button class="preset-btn add" id="btnAddPreset" title="Создать">+</button>
+                        <button class="preset-btn edit" id="btnEditPreset" title="Редактировать">✏️</button>
                         <button class="preset-btn delete" id="btnDeletePreset" title="Удалить">🗑️</button>
                     </div>
                 </div>
 
                 <div class="divider"></div>
 
-                <!-- НАСТРОЙКИ -->
-                <div id="settingsPanel" style="display:none; flex-direction:column; gap:8px;">
+                <div id="settingsPanel" style="display:none; flex-direction:column; gap:6px;">
                     <div class="settings-bar">
-                        <span class="settings-bar-label">📐 Компактный режим (без прокрутки)</span>
+                        <span class="settings-bar-label">📐 Компактный режим</span>
                         <label class="settings-toggle">
                             <input type="checkbox" class="settings-toggle-input" id="toggleCompact">
                             <span class="settings-toggle-slider"></span>
@@ -470,64 +463,53 @@
                     <div class="divider"></div>
                 </div>
 
-                <div class="clearance-row">
-                    <span class="clearance-label">📏 Габарит (м) — для всех</span>
-                    <div class="clearance-controls">
-                        <button class="clearance-btn" id="btnClearanceMinus">−</button>
-                        <input  type="number" class="clearance-input" id="inputClearance"
-                                step="0.5" min="1.0" max="15.0" value="5.0">
-                        <button class="clearance-btn" id="btnClearancePlus">+</button>
+                <div class="compact-row">
+                    <div class="field-group">
+                        <label class="field-label"><span class="field-label-icon">📏</span>Габарит</label>
+                        <div class="number-controls">
+                            <button class="number-btn" id="btnClearanceMinus">−</button>
+                            <input type="number" class="number-input" id="inputClearance" step="0.5" min="1.0" max="15.0" value="5.0">
+                            <button class="number-btn" id="btnClearancePlus">+</button>
+                        </div>
                     </div>
-                </div>
-
-                <!-- НОВОЕ ПОЛЕ: Количество муфт -->
-                <div class="clearance-row">
-                    <span class="clearance-label">🔌 Количество муфт</span>
-                    <div class="clearance-controls">
-                        <button class="clearance-btn" id="btnCouplingMinus">−</button>
-                        <input  type="number" class="clearance-input" id="inputCouplingCount"
-                                step="1" min="0" max="50" value="0">
-                        <button class="clearance-btn" id="btnCouplingPlus">+</button>
+                    <div class="field-group">
+                        <label class="field-label"><span class="field-label-icon">🔌</span>Муфты</label>
+                        <div class="number-controls">
+                            <button class="number-btn" id="btnCouplingMinus">−</button>
+                            <input type="number" class="number-input" id="inputCouplingCount" step="1" min="0" max="50" value="0">
+                            <button class="number-btn" id="btnCouplingPlus">+</button>
+                        </div>
                     </div>
                 </div>
 
                 <div class="field-group">
-                    <label class="field-label">
-                        <span class="field-label-icon">📐</span>
-                        Длина провода (м) — общая для всех
-                    </label>
-                    <input type="number" min="0" step="0.1" class="field-input" id="inputWireLength" placeholder="Введите длину провода...">
+                    <label class="field-label"><span class="field-label-icon">📐</span>Длина (м)</label>
+                    <input type="number" min="0" step="0.1" class="field-input" id="inputWireLength" placeholder="Длина провода...">
                 </div>
 
                 <div class="field-group">
-                    <label class="field-label">
-                        <span class="field-label-icon">🔌</span>
-                        Марка провода
-                    </label>
-                    <input type="text" class="field-input" id="inputWireBrand" placeholder="Введите марку провода..." autocomplete="off">
+                    <label class="field-label"><span class="field-label-icon">🔌</span>Марка провода</label>
+                    <input type="text" class="field-input" id="inputWireBrand" placeholder="Марка провода..." autocomplete="off">
                     <div id="wireSuggestions" class="suggestions" style="display:none;">
-                        <div class="suggestions-title">💡 Похожие варианты:</div>
+                        <div class="suggestions-title">💡 Похожие:</div>
                         <div class="suggestions-list" id="wireSuggestionsList"></div>
                     </div>
                 </div>
 
                 <div class="field-group">
-                    <label class="field-label">
-                        <span class="field-label-icon">⚙️</span>
-                        Способ крепления — общий для всех
-                    </label>
+                    <label class="field-label"><span class="field-label-icon">⚙️</span>Крепление</label>
                     <div class="radio-group">
                         <div class="radio-option">
                             <input type="radio" class="radio-input" id="fasteningNatyazhnoe" name="fastening" value="Натяжное" checked>
-                            <label class="radio-label" for="fasteningNatyazhnoe"><span class="radio-dot"></span><span>Натяжное</span></label>
+                            <label class="radio-label" for="fasteningNatyazhnoe"><span class="radio-dot"></span><span>Натяж.</span></label>
                         </div>
                         <div class="radio-option">
                             <input type="radio" class="radio-input" id="fasteningPodderzh" name="fastening" value="Поддерживающее">
-                            <label class="radio-label" for="fasteningPodderzh"><span class="radio-dot"></span><span>Поддерж.</span></label>
+                            <label class="radio-label" for="fasteningPodderzh"><span class="radio-dot"></span><span>Поддер.</span></label>
                         </div>
                         <div class="radio-option">
                             <input type="radio" class="radio-input" id="fasteningAnkernoe" name="fastening" value="Анкерное">
-                            <label class="radio-label" for="fasteningAnkernoe"><span class="radio-dot"></span><span>Анкерное</span></label>
+                            <label class="radio-label" for="fasteningAnkernoe"><span class="radio-dot"></span><span>Анкер.</span></label>
                         </div>
                     </div>
                 </div>
@@ -540,33 +522,30 @@
                         <span class="toggle-slider"></span>
                     </div>
                     <div class="toggle-label">
-                        <span>🔀</span><span>Заполнение пересечений</span>
+                        <span>🔀</span><span>Пересечения</span>
                         <span class="toggle-status active" id="toggleStatus">ВКЛ</span>
                     </div>
                 </div>
 
                 <div class="crossing-fields" id="crossingFields">
                     <div class="field-group">
-                        <label class="field-label">
-                            <span class="field-label-icon">🌳</span>
-                            Объект пересечения — общий для всех
-                        </label>
+                        <label class="field-label"><span class="field-label-icon">🌳</span>Объект</label>
                         <div class="crossing-objects">
                             <div class="crossing-obj-option">
-                                <input type="radio" class="crossing-obj-input" id="crossTree"     name="crossingObject" value="Дерево"    checked>
+                                <input type="radio" class="crossing-obj-input" id="crossTree" name="crossingObject" value="Дерево" checked>
                                 <label class="crossing-obj-label" for="crossTree">🌲 Дерево</label>
                             </div>
                             <div class="crossing-obj-option">
-                                <input type="radio" class="crossing-obj-input" id="crossFence"    name="crossingObject" value="Забор">
+                                <input type="radio" class="crossing-obj-input" id="crossFence" name="crossingObject" value="Забор">
                                 <label class="crossing-obj-label" for="crossFence">🚧 Забор</label>
                             </div>
                             <div class="crossing-obj-option">
-                                <input type="radio" class="crossing-obj-input" id="crossRoad"     name="crossingObject" value="Дорога">
-                                <label class="crossing-obj-label" for="crossRoad">🛣️ Дорога</label>
+                                <input type="radio" class="crossing-obj-input" id="crossRoad" name="crossingObject" value="Автодорога">
+                                <label class="crossing-obj-label" for="crossRoad">🛣️ Автодорога</label>
                             </div>
                             <div class="crossing-obj-option">
                                 <input type="radio" class="crossing-obj-input" id="crossBuilding" name="crossingObject" value="Строение">
-                                <label class="crossing-obj-label" for="crossBuilding">🏠 Строение</label>
+                                <label class="crossing-obj-label" for="crossBuilding">🏠 Строен.</label>
                             </div>
                         </div>
                     </div>
@@ -574,51 +553,42 @@
 
                 <div class="divider"></div>
 
-                <div class="field-group">
-                    <label class="field-label">
-                        <span class="field-label-icon">🏗️</span>
-                        Тип конструкции
-                    </label>
-                    <div class="radio-group">
-                        <div class="radio-option">
-                            <input type="radio" class="radio-input" id="constructionVL" name="construction" value="ВЛ" checked>
-                            <label class="radio-label" for="constructionVL"><span class="radio-dot"></span><span>ВЛ</span></label>
+                <div class="compact-row">
+                    <div class="field-group">
+                        <label class="field-label"><span class="field-label-icon">🏗️</span>Констр.</label>
+                        <div class="radio-group">
+                            <div class="radio-option">
+                                <input type="radio" class="radio-input" id="constructionVL" name="construction" value="ВЛ" checked>
+                                <label class="radio-label" for="constructionVL"><span class="radio-dot"></span><span>ВЛ</span></label>
+                            </div>
+                            <div class="radio-option">
+                                <input type="radio" class="radio-input" id="constructionKL" name="construction" value="КЛ">
+                                <label class="radio-label" for="constructionKL"><span class="radio-dot"></span><span>КЛ</span></label>
+                            </div>
                         </div>
-                        <div class="radio-option">
-                            <input type="radio" class="radio-input" id="constructionKL" name="construction" value="КЛ">
-                            <label class="radio-label" for="constructionKL"><span class="radio-dot"></span><span>КЛ</span></label>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label"><span class="field-label-icon">🛣️</span>Автодорога</label>
+                        <div class="radio-group">
+                            <div class="radio-option">
+                                <input type="radio" class="radio-input" id="roadAsphalt" name="roadType" value="Асфальтовая" checked>
+                                <label class="radio-label" for="roadAsphalt"><span class="radio-dot"></span><span>Асфальт</span></label>
+                            </div>
+                            <div class="radio-option">
+                                <input type="radio" class="radio-input" id="roadGround" name="roadType" value="Грунтовая">
+                                <label class="radio-label" for="roadGround"><span class="radio-dot"></span><span>Грунт</span></label>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <div class="field-group">
-                    <label class="field-label">
-                        <span class="field-label-icon">🛣️</span>
-                        Тип дороги
-                    </label>
-                    <div class="radio-group">
-                        <div class="radio-option">
-                            <input type="radio" class="radio-input" id="roadAsphalt" name="roadType" value="Асфальтовая" checked>
-                            <label class="radio-label" for="roadAsphalt"><span class="radio-dot"></span><span>Асфальт</span></label>
-                        </div>
-                        <div class="radio-option">
-                            <input type="radio" class="radio-input" id="roadGround" name="roadType" value="Грунтовая">
-                            <label class="radio-label" for="roadGround"><span class="radio-dot"></span><span>Грунт</span></label>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="field-group">
-                    <label class="field-label">
-                        <span class="field-label-icon">🌍</span>
-                        Тип местности
-                    </label>
-                    <input type="text" class="field-input" id="inputTerrain" placeholder="Введите тип местности...">
+                    <label class="field-label"><span class="field-label-icon">🌍</span>Местность</label>
+                    <input type="text" class="field-input" id="inputTerrain" placeholder="Тип местности...">
                 </div>
 
                 <a href="#" class="discord-link" id="discordLink">
-                    <span>💬</span>
-                    <span>Discord: KAST Team</span>
+                    <span>💬</span><span>Discord: KAST Team</span>
                 </a>
             </div>
 
@@ -635,46 +605,46 @@
         <!-- Модалки -->
         <div class="modal-overlay" id="modalAddPreset">
             <div class="modal">
-                <div class="modal-title">➕ Создать новый пресет</div>
+                <div class="modal-title">➕ Новый пресет</div>
                 <div class="modal-content">
-                    <input type="text" class="field-input" id="inputNewPresetName" placeholder="Название пресета...">
+                    <input type="text" class="field-input" id="inputNewPresetName" placeholder="Название...">
                 </div>
                 <div class="modal-buttons">
                     <button class="modal-btn modal-btn-secondary" id="btnCancelAdd">Отмена</button>
-                    <button class="modal-btn modal-btn-primary"   id="btnConfirmAdd">Создать</button>
+                    <button class="modal-btn modal-btn-primary" id="btnConfirmAdd">Создать</button>
                 </div>
             </div>
         </div>
 
         <div class="modal-overlay" id="modalEditPreset">
             <div class="modal">
-                <div class="modal-title">✏️ Переименовать пресет</div>
+                <div class="modal-title">✏️ Переименовать</div>
                 <div class="modal-content">
                     <input type="text" class="field-input" id="inputEditPresetName" placeholder="Новое название...">
                 </div>
                 <div class="modal-buttons">
                     <button class="modal-btn modal-btn-secondary" id="btnCancelEdit">Отмена</button>
-                    <button class="modal-btn modal-btn-primary"   id="btnConfirmEdit">Сохранить</button>
+                    <button class="modal-btn modal-btn-primary" id="btnConfirmEdit">Сохранить</button>
                 </div>
             </div>
         </div>
 
         <div class="modal-overlay" id="modalDeletePreset">
             <div class="modal">
-                <div class="modal-title">🗑️ Удалить пресет?</div>
+                <div class="modal-title">🗑️ Удалить?</div>
                 <div class="modal-content">
-                    <p class="modal-text">Вы действительно хотите удалить пресет <span class="modal-highlight" id="deletePresetName"></span>?</p>
+                    <p class="modal-text">Удалить пресет <span class="modal-highlight" id="deletePresetName"></span>?</p>
                 </div>
                 <div class="modal-buttons">
                     <button class="modal-btn modal-btn-secondary" id="btnCancelDelete">Отмена</button>
-                    <button class="modal-btn modal-btn-primary"   id="btnConfirmDelete">Удалить</button>
+                    <button class="modal-btn modal-btn-primary" id="btnConfirmDelete">Удалить</button>
                 </div>
             </div>
         </div>
 
         <div class="modal-overlay" id="modalWireBinding">
             <div class="modal">
-                <div class="modal-title">🔗 Выберите тип вязки</div>
+                <div class="modal-title">🔗 Тип вязки</div>
                 <div class="modal-content">
                     <p class="modal-text">
                         Марка: <span class="modal-highlight" id="wireTypeDisplay"></span><br>
@@ -683,30 +653,28 @@
                     <div class="radio-group" style="flex-direction:column;">
                         <div class="radio-option" style="min-width:100%;">
                             <input type="radio" class="radio-input" id="bindingEnd" name="bindingType" value="end" checked>
-                            <label class="radio-label" for="bindingEnd" style="font-size:12px;"><span class="radio-dot"></span><span>Вязка концевая</span></label>
+                            <label class="radio-label" for="bindingEnd" style="font-size:11px;"><span class="radio-dot"></span><span>Концевая</span></label>
                         </div>
                         <div class="radio-option" style="min-width:100%;">
                             <input type="radio" class="radio-input" id="bindingThrough" name="bindingType" value="through">
-                            <label class="radio-label" for="bindingThrough" style="font-size:12px;"><span class="radio-dot"></span><span>Вязка проходная</span></label>
+                            <label class="radio-label" for="bindingThrough" style="font-size:11px;"><span class="radio-dot"></span><span>Проходная</span></label>
                         </div>
                     </div>
                 </div>
                 <div class="modal-buttons">
                     <button class="modal-btn modal-btn-secondary" id="btnCancelBinding">Отмена</button>
-                    <button class="modal-btn modal-btn-primary"   id="btnConfirmBinding">Продолжить</button>
+                    <button class="modal-btn modal-btn-primary" id="btnConfirmBinding">Далее</button>
                 </div>
             </div>
         </div>
 
         <div class="modal-overlay" id="modalAnchorType">
             <div class="modal">
-                <div class="modal-title">⚓ Выберите тип анкерного крепления</div>
-                <div class="modal-content" id="anchorOptions">
-                    <!-- Динамически заполняется -->
-                </div>
+                <div class="modal-title">⚓ Тип анкерного крепления</div>
+                <div class="modal-content" id="anchorOptions"></div>
                 <div class="modal-buttons">
                     <button class="modal-btn modal-btn-secondary" id="btnCancelAnchor">Отмена</button>
-                    <button class="modal-btn modal-btn-primary"   id="btnConfirmAnchor">Продолжить</button>
+                    <button class="modal-btn modal-btn-primary" id="btnConfirmAnchor">Далее</button>
                 </div>
             </div>
         </div>
@@ -781,7 +749,6 @@
             btnSettings: shadow.querySelector('#btnSettings'),
             settingsPanel: shadow.querySelector('#settingsPanel'),
             toggleCompact: shadow.querySelector('#toggleCompact'),
-            // НОВЫЕ ЭЛЕМЕНТЫ: Количество муфт
             inputCouplingCount: shadow.querySelector('#inputCouplingCount'),
             btnCouplingMinus: shadow.querySelector('#btnCouplingMinus'),
             btnCouplingPlus: shadow.querySelector('#btnCouplingPlus')
@@ -858,7 +825,7 @@
         });
 
         /******************************************************************
-         * КОЛИЧЕСТВО МУФТ (НОВЫЙ ФУНКЦИОНАЛ)
+         * КОЛИЧЕСТВО МУФТ
          ******************************************************************/
         function clampCouplingCount(val) { return Math.max(0, Math.min(50, val)); }
         function updateCouplingDisplay() { ui.inputCouplingCount.value = db.couplingCount; }
@@ -979,7 +946,7 @@
             ui.inputWireBrand.value  = preset.wireBrand || '';
             ui.inputTerrain.value    = preset.terrain || '';
             updateClearanceDisplay();
-            updateCouplingDisplay();  // Обновление поля муфт
+            updateCouplingDisplay();
 
             const f = db.fastening || 'Натяжное';
             ui.fasteningNatyazhnoe.checked = f === 'Натяжное';
@@ -992,7 +959,7 @@
             const co = db.crossingObject || 'Дерево';
             if (co === 'Дерево')    ui.crossTree.checked     = true;
             if (co === 'Забор')     ui.crossFence.checked    = true;
-            if (co === 'Дорога')    ui.crossRoad.checked     = true;
+            if (co === 'Автодорога')    ui.crossRoad.checked     = true;
             if (co === 'Строение')  ui.crossBuilding.checked = true;
 
             ui.presetSelect.innerHTML = db.presets.map(p =>
@@ -1007,19 +974,6 @@
             updateScale();
             updateCompactMode();
         }
-
-        /******************************************************************
-         * СОХРАНЕНИЕ НАСТРОЕК КОНСТРУКЦИИ И ДОРОГИ
-         ******************************************************************/
-        [ui.constructionKL, ui.constructionVL].forEach(r =>
-            r.addEventListener('change', (e) => { if (e.target.checked) { getActive().construction = e.target.value; saveDb(); updateCrossingFieldsState(); } })
-        );
-        [ui.roadGround, ui.roadAsphalt].forEach(r =>
-            r.addEventListener('change', (e) => { if (e.target.checked) { getActive().roadType = e.target.value; saveDb(); } })
-        );
-        [ui.crossTree, ui.crossFence, ui.crossRoad, ui.crossBuilding].forEach(r =>
-            r.addEventListener('change', (e) => { if (e.target.checked) { db.crossingObject = e.target.value; saveDb(); } })
-        );
 
         /******************************************************************
          * ПЕРЕКЛЮЧАТЕЛЬ ПЕРЕСЕЧЕНИЙ
@@ -1089,12 +1043,11 @@
                 if (data.construction)                              { preset.construction = data.construction; updated = true; }
                 if (data.crossingObject)                            { db.crossingObject   = data.crossingObject; updated = true; }
                 if (data.wireLength)                                { db.wireLength       = data.wireLength;   updated = true; }
-                if (updated) { saveDb(); updateUI(); showNotification('✅ Данные успешно считаны с формы!', 'success'); }
-                else showNotification('⚠️ Не удалось найти данные на странице', 'warning');
+                if (updated) { saveDb(); updateUI(); showNotification('✅ Данные успешно считаны!', 'success'); }
+                else showNotification('⚠️ Не удалось найти данные', 'warning');
             } catch (err) {
                 console.error(err);
                 showNotification('❌ Ошибка при сканировании', 'error');
-                alert(`[KOLUS] ❌ Критическая ошибка при сканировании формы:\n\n${err.message}\n\nСм. консоль (F12) для подробностей.`);
             } finally {
                 ui.btnScan.disabled = false;
                 ui.btnScan.innerHTML = '<span>🔍</span><span>Сканировать</span>';
@@ -1114,14 +1067,14 @@
                 if (isWireTypeAorAC(preset.wireBrand)) {
                     ui.anchorOptions.innerHTML = `
                         <div class="radio-group" style="flex-direction:column;">
-                            <div class="radio-option" style="min-width:100%;"><input type="radio" class="radio-input" id="anchorBindingEnd"     name="anchorType" value="Вязка концевая"  checked><label class="radio-label" for="anchorBindingEnd"    style="font-size:11px;"><span class="radio-dot"></span><span>Вязка концевая</span></label></div>
-                            <div class="radio-option" style="min-width:100%;"><input type="radio" class="radio-input" id="anchorBindingThrough" name="anchorType" value="Вязка проходная">       <label class="radio-label" for="anchorBindingThrough" style="font-size:11px;"><span class="radio-dot"></span><span>Вязка проходная</span></label></div>
+                            <div class="radio-option" style="min-width:100%;"><input type="radio" class="radio-input" id="anchorBindingEnd"     name="anchorType" value="Вязка концевая"  checked><label class="radio-label" for="anchorBindingEnd"    style="font-size:10px;"><span class="radio-dot"></span><span>Вязка концевая</span></label></div>
+                            <div class="radio-option" style="min-width:100%;"><input type="radio" class="radio-input" id="anchorBindingThrough" name="anchorType" value="Вязка проходная">       <label class="radio-label" for="anchorBindingThrough" style="font-size:10px;"><span class="radio-dot"></span><span>Вязка проходная</span></label></div>
                         </div>`;
                 } else {
                     ui.anchorOptions.innerHTML = `
                         <div class="radio-group" style="flex-direction:column;">
-                            <div class="radio-option" style="min-width:100%;"><input type="radio" class="radio-input" id="anchorClamp" name="anchorType" value="Зажим анкерный клиновой" checked><label class="radio-label" for="anchorClamp" style="font-size:11px;"><span class="radio-dot"></span><span>Зажим анкерный клиновой</span></label></div>
-                            <div class="radio-option" style="min-width:100%;"><input type="radio" class="radio-input" id="anchorBolt"  name="anchorType" value="Болтовой зажим">                  <label class="radio-label" for="anchorBolt"  style="font-size:11px;"><span class="radio-dot"></span><span>Болтовой зажим</span></label></div>
+                            <div class="radio-option" style="min-width:100%;"><input type="radio" class="radio-input" id="anchorClamp" name="anchorType" value="Зажим анкерный клиновой" checked><label class="radio-label" for="anchorClamp" style="font-size:10px;"><span class="radio-dot"></span><span>Зажим анкерный</span></label></div>
+                            <div class="radio-option" style="min-width:100%;"><input type="radio" class="radio-input" id="anchorBolt"  name="anchorType" value="Болтовой зажим">                  <label class="radio-label" for="anchorBolt"  style="font-size:10px;"><span class="radio-dot"></span><span>Болтовой зажим</span></label></div>
                         </div>`;
                 }
                 ui.btnConfirmAnchor.disabled = false;
@@ -1164,17 +1117,10 @@
                 const roadType     = ui.roadGround.checked ? 'Грунтовая' : 'Асфальтовая';
                 const fastening    = db.fastening || 'Натяжное';
 
-                console.log('[KOLUS DEBUG 1] performFill start');
-
-                // ── Поле designation ──────────────────────────────────────
                 const designationInput = await waitForInput('input[name="designation"]');
-                if (!designationInput) {
-                    throw new Error('Не найдено поле "designation" на странице. Возможно, форма ещё не загрузилась.');
-                }
+                if (!designationInput) throw new Error('Не найдено поле "designation".');
                 setReactInputValue(designationInput, preset.designation || 'магистраль');
-                console.log('[KOLUS DEBUG 2] designation done');
 
-                // ── Логика марки провода ───────────────────────────────────
                 const wireEl = document.querySelector('fieldset[name="cableType"] .smwb-select-field span') ||
                                document.querySelector('input[name="cableType"]');
                 const siteWireRaw = wireEl ? (wireEl.textContent || wireEl.value || '') : '';
@@ -1186,60 +1132,38 @@
                 const siteWireIsEmpty = !siteWire || siteWire === '...' || siteWire.length <= 2 || hasPlaceholderClass;
 
                 if (siteWireIsEmpty) {
-                    console.log('🔌 KOLUS: Марка не выбрана на сайте → вставляем из пресета:', preset.wireBrand);
-                    try {
-                        const ok = await selectWireBrandReact(preset.wireBrand);
-                        if (!ok) {
-                            showNotification('⚠️ Не удалось выбрать марку провода', 'warning');
-                            alert(`[KOLUS] ⚠️ Не удалось выбрать марку провода "${preset.wireBrand}" из списка.\n\nПроверьте, что такая марка существует в выпадающем списке на сайте.`);
-                        }
-                    } catch (wireErr) {
-                        console.error('⚠️ KOLUS: Ошибка при выборе марки:', wireErr);
-                        showNotification('⚠️ Не удалось выбрать марку провода', 'warning');
-                        alert(`[KOLUS] ❌ Ошибка при выборе марки провода:\n\n${wireErr.message}`);
+                    const ok = await selectWireBrandReact(preset.wireBrand);
+                    if (!ok) {
+                        showNotification('⚠️ Не удалось выбрать марку', 'warning');
+                        alert(`[KOLUS] ⚠️ Не удалось выбрать марку "${preset.wireBrand}".`);
                     }
                 } else if (wireMatches(siteWire, preset.wireBrand)) {
-                    console.log('⏭️ KOLUS: Марка совпадает (' + siteWire + ') → пропускаем');
+                    console.log('⏭️ KOLUS: Марка совпадает');
                 } else {
-                    const msg = `Марка на сайте (${siteWire}) отличается от пресета (${preset.wireBrand})!\n\nЗаполнение прервано.`;
-                    showNotification('⚠️ ' + msg.split('\n')[0], 'warning');
+                    const msg = `Марка на сайте (${siteWire}) ≠ пресет (${preset.wireBrand})!`;
+                    showNotification('⚠️ ' + msg, 'warning');
                     alert('[KOLUS] ⚠️ ' + msg);
                     return;
                 }
 
-                console.log('[KOLUS DEBUG 3] wire done, continuing...');
                 await sleep(200);
 
-                // ── НОВАЯ ЛОГИКА: Для СИП 2х16 фазы=1, провода в фазе=1 ──
-                console.log('[KOLUS DEBUG 4] phaseCount...');
                 const phaseInput = await waitForInput('input[name="phaseCount"]');
-                if (!phaseInput) throw new Error('Не найдено поле "phaseCount". Форма могла не загрузиться полностью.');
+                if (!phaseInput) throw new Error('Не найдено поле "phaseCount".');
 
                 const isSIP2 = isSIP2x16(preset.wireBrand);
                 if (isSIP2) {
-                    console.log('🔌 KOLUS: Обнаружен СИП 2х16 → фазы=1, провода в фазе=1');
                     setReactInputValue(phaseInput, '1');
                 } else {
                     setReactInputValue(phaseInput, '3');
                 }
 
-                console.log('[KOLUS DEBUG 5] wireCountInPhase...');
                 const wireCountInput = await waitForInput('input[name="wireCountInPhase"]');
-                if (wireCountInput) {
-                    setReactInputValue(wireCountInput, '1');
-                }
+                if (wireCountInput) setReactInputValue(wireCountInput, '1');
 
-                console.log('[KOLUS DEBUG 6] construction...');
                 setReactInputValue(await waitForInput('input[name="construction"]'), construction);
-
-                console.log('[KOLUS DEBUG 7] fastening...');
                 setReactInputValue(await waitForInput('input[name="fastening.type"]'), fastening);
-
-                console.log('[KOLUS DEBUG 8] areaType...');
                 setReactInputValue(await waitForInput('input[name="areaType"]'), preset.terrain);
-                console.log('[KOLUS DEBUG 9] areaType done');
-
-                console.log('📏 KOLUS: Габарит:', db.clearance);
                 setReactInputValue(await waitForInput('input[name="overallDimension.height"]'), db.clearance);
 
                 const tension = anchorType || wireTension ||
@@ -1254,17 +1178,11 @@
                     if (li) setReactInputValue(li, db.wireLength);
                 }
 
-                // ── НОВАЯ ЛОГИКА: Заполнение количества муфт ──
                 if (db.couplingCount && parseInt(db.couplingCount) > 0) {
-                    console.log('🔌 KOLUS: Заполняю количество муфт:', db.couplingCount);
                     const couplingInput = await waitForInput('input[name*="coupling"]') ||
                                          await waitForInput('input[name*="муфт"]') ||
                                          await waitForInput('input[name*="muff"]');
-                    if (couplingInput) {
-                        setReactInputValue(couplingInput, db.couplingCount);
-                    } else {
-                        console.warn('⚠️ KOLUS: Поле для муфт не найдено на странице');
-                    }
+                    if (couplingInput) setReactInputValue(couplingInput, db.couplingCount);
                 }
 
                 if (construction === 'ВЛ' && db.isCrossingEnabled) {
@@ -1291,21 +1209,12 @@
                     );
                 }
 
-                showNotification('✅ Форма успешно заполнена!', 'success');
+                showNotification('✅ Форма заполнена!', 'success');
 
             } catch (err) {
-                console.error('❌ KOLUS: Критическая ошибка заполнения:', err);
-                console.trace();
-                showNotification('❌ Критическая ошибка при заполнении', 'error');
-                alert(
-                    `[KOLUS v1.6.0] ❌ Критическая ошибка при заполнении формы!\n\n` +
-                    `Ошибка: ${err.message}\n\n` +
-                    `Стек:\n${err.stack || 'недоступен'}\n\n` +
-                    `Пресет: ${getActive().name}\n` +
-                    `Марка: ${getActive().wireBrand}\n` +
-                    `Крепление: ${db.fastening}\n\n` +
-                    `Откройте консоль (F12 → Console) для подробностей.`
-                );
+                console.error('❌ KOLUS:', err);
+                showNotification('❌ Ошибка заполнения', 'error');
+                alert(`[KOLUS] ❌ Ошибка: ${err.message}`);
             } finally {
                 ui.btnFill.disabled = false;
                 ui.btnFill.innerHTML = '<span>✨</span><span>Заполнить</span>';
@@ -1401,7 +1310,7 @@
         updateUI();
         monitorWire();
 
-        console.log('✅ KOLUS v1.6.0 готов к работе! | Created by KAST Team');
+        console.log('✅ KOLUS v1.6.1 готов! | Created by KAST Team');
         document.getElementById('kolus-ui-host').style.display = db.isVisible ? 'block' : 'none';
     }
 
@@ -1428,7 +1337,7 @@
     }
     function showNotificationGlobal(message, type = 'success') {
         const n = document.createElement('div');
-        n.style.cssText = `position:fixed;top:20px;right:20px;background:${type==='success'?'linear-gradient(135deg,rgba(22,163,74,0.95),rgba(0,0,0,0.95))':'linear-gradient(135deg,rgba(234,179,8,0.95),rgba(0,0,0,0.95))'};border:1px solid ${type==='success'?'rgba(34,197,94,0.5)':'rgba(234,179,8,0.5)'};border-radius:12px;padding:16px 20px;color:#fff;font-size:13px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;z-index:1000001;box-shadow:0 10px 30px rgba(0,0,0,0.5);max-width:300px;`;
+        n.style.cssText = `position:fixed;top:20px;right:20px;background:${type==='success'?'linear-gradient(135deg,rgba(22,163,74,0.95),rgba(0,0,0,0.95))':'linear-gradient(135deg,rgba(234,179,8,0.95),rgba(0,0,0,0.95))'};border:1px solid ${type==='success'?'rgba(34,197,94,0.5)':'rgba(234,179,8,0.5)'};border-radius:10px;padding:12px 16px;color:#fff;font-size:12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;z-index:1000001;box-shadow:0 8px 24px rgba(0,0,0,0.5);max-width:280px;`;
         n.textContent = message;
         document.body.appendChild(n);
         setTimeout(() => { setTimeout(() => n.remove(), 300); }, 3000);
@@ -1438,7 +1347,7 @@
         if (e.altKey && e.key.toLowerCase() === 'з') { e.preventDefault(); toggleUI(); }
     });
 
-    console.log('🚀 KOLUS v1.6.0 загружается...');
+    console.log('🚀 KOLUS v1.6.1 загружается...');
     console.log('💡 Горячая клавиша: ALT + З - показать/скрыть UI');
 
     window.kolusManuallyHidden = false;
