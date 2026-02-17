@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Автозаполнение опор - v1.8.1 (KOLUS Style)
+// @name         Автозаполнение опор - v1.8.3 (KOLUS Style)
 // @namespace    pillar.autofill.advanced
-// @version      1.8.1
+// @version      1.8.3
 // @description  🏗️ Заполнение формы опор в стиле KOLUS | Created by KAST Team
 // @match        https://moe2.agentumit.ru/*
 // @grant        none
@@ -10,7 +10,7 @@
 (function() {
     'use strict';
 
-    console.log('🚀 Автозаполнение опор v1.8.1 загружен | Created by KAST Team');
+    console.log('🚀 Автозаполнение опор v1.8.3 загружен | Created by KAST Team');
 
     const STORAGE_KEY = 'pillar_autofill_v1';
 
@@ -28,15 +28,16 @@
     ];
     const PLACEMENT_TYPES = ['Ответвительная', 'Промежуточная', 'Угловая', 'Концевая'];
     const BRACING_MATS    = ['деревянная', 'металлическая', 'железобетонная'];
-    const ATTACH_MATS     = ['деревянная', 'металлическая'];
+    const ATTACH_MATS     = ['железобетонная', 'деревянная'];
     const LAMP_TYPES      = ['ДНАТ', 'ДРЛ', 'Светодиод', 'Ввод вручную'];
 
     const defaultData = {
         pillar: { type: 'СВ 95', constructionType: 'одностоечная', placement: 'Промежуточная', material: 'железобетонная' },
         stands: { count: 1, material: 'железобетонная' },
         bracing: { count: 0, material: 'металлическая' },
-        attachments: { count: 0, material: 'деревянная' },
+        attachments: { count: 0, material: 'железобетонная' },
         additionalLoad: { communicationCabinet: 0, communicationLine: 0, streetLamp: 0, volsMuffle: 0, streetLantern: 0, voltageLines: 0 },
+        subscribers: { settlement: '', street: '' },
         lamps: [],
         ui: { pos: { x: 20, y: 20 }, isCollapsed: false, scale: 100 }
     };
@@ -44,6 +45,11 @@
     let db = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultData;
     db.additionalLoad = Object.assign({ communicationCabinet: 0, communicationLine: 0, streetLamp: 0, volsMuffle: 0, streetLantern: 0, voltageLines: 0 }, db.additionalLoad || {});
     db.ui = Object.assign({ pos: { x: 20, y: 20 }, isCollapsed: false, scale: 100 }, db.ui || {});
+    if (!db.attachments) db.attachments = { count: 0, material: 'железобетонная' };
+    if (db.attachments.material !== 'железобетонная' && db.attachments.material !== 'деревянная') {
+        db.attachments.material = 'железобетонная';
+    }
+    if (!db.subscribers) db.subscribers = { settlement: '', street: '' };
     const saveDb = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 
     /******************************************************************
@@ -126,7 +132,6 @@
         return true;
     }
 
-    // Кликает камеру ровно столько раз, чтобы набрать нужное количество фото
     async function clickCameraN(selector, needed) {
         const fs = document.querySelector(selector);
         if (!fs) return false;
@@ -169,7 +174,7 @@
     }
 
     /******************************************************************
-     * КАРУСЕЛЬ
+     * КАРУСЕЛЬ (общая — для стоек, укосов, нагрузок)
      ******************************************************************/
     function getCarouselIndex() {
         const dots = document.querySelectorAll('.smwb-carousel__navigation__dot');
@@ -202,16 +207,86 @@
     }
 
     /******************************************************************
+     * КАРУСЕЛЬ АБОНЕНТОВ (изолированная навигация)
+     ******************************************************************/
+    function getSubscriberCarousel() {
+        const countInp = document.querySelector('input[name="subscribers.count"]');
+        if (!countInp) return null;
+        // Ищем ближайшую карточку и внутри неё карусель
+        const card = countInp.closest('.smwb-card');
+        if (card) {
+            const c = card.querySelector('.smwb-carousel');
+            if (c) return c;
+        }
+        // Запасной вариант: идём вверх по DOM
+        let el = countInp.parentElement;
+        for (let i = 0; i < 8; i++) {
+            if (!el) break;
+            const c = el.querySelector('.smwb-carousel');
+            if (c) return c;
+            el = el.parentElement;
+        }
+        return null;
+    }
+
+    async function goToSubscriberSlide(target) {
+        const carousel = getSubscriberCarousel();
+        if (!carousel) {
+            log('Карусель абонентов не найдена', 'warning');
+            return false;
+        }
+
+        const getDots    = () => carousel.querySelectorAll('.smwb-carousel__navigation__dot');
+        const getCurrent = () => {
+            const dots = getDots();
+            for (let i = 0; i < dots.length; i++) if (dots[i].classList.contains('current')) return i;
+            return 0;
+        };
+
+        for (let attempt = 0; attempt < 6; attempt++) {
+            if (getCurrent() === target) return true;
+
+            const diff    = target - getCurrent();
+            const nextBtn = carousel.querySelector('.smwb-carousel__arrow_next');
+            const prevBtn = carousel.querySelector('.smwb-carousel__arrow_prev');
+            const btn     = diff > 0 ? nextBtn : prevBtn;
+
+            if (btn) {
+                for (let c = 0; c < Math.abs(diff); c++) {
+                    ['mousedown', 'mouseup', 'click'].forEach(t =>
+                        btn.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))
+                    );
+                    await sleep(350);
+                }
+            }
+
+            if (getCurrent() === target) return true;
+
+            // Запасной вариант — клик по точке навигации
+            const dots = getDots();
+            if (target < dots.length) {
+                const dot = dots[target].querySelector('button') || dots[target];
+                ['mousedown', 'mouseup', 'click'].forEach(t =>
+                    dot.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))
+                );
+                await sleep(500);
+                if (getCurrent() === target) return true;
+            }
+
+            await sleep(300);
+        }
+        return false;
+    }
+
+    /******************************************************************
      * НАГРУЗКИ
      ******************************************************************/
     function buildDesiredLoads() {
         const list = [];
-        // Фонари — ПЕРВЫМИ
         for (let i = 0; i < db.additionalLoad.streetLamp; i++) {
             const lamp = db.lamps[i] || { type: 'ДНАТ', customType: '', mounting: 'приставной', powerSupply: 'Кабель', direction: 'перпендикулярно линии' };
             list.push({ type: 'фонарь уличный', lamp });
         }
-        // Светильники
         for (let i = 0; i < db.additionalLoad.streetLantern; i++)
             list.push({ type: 'светильник' });
         for (let i = 0; i < db.additionalLoad.communicationCabinet; i++)
@@ -260,10 +335,9 @@
             const lt   = lamp.type === 'Ввод вручную' ? lamp.customType : lamp.type;
             await fillField(`input[name="additionalLoad.info[${loadIndex}].streetLampType"]`, lt, `Лампа[${loadIndex}]`);
             await sleep(150);
-            // Единичная мощность = 3: пробуем макс 4 нажатия, если не вышло — пропускаем
             const powerInp = document.querySelector(`input[name="additionalLoad.info[${loadIndex}].streetLampPower"]`);
             if (powerInp) {
-                const powerCont = powerInp.closest('.zC3boZPYpGZ1oTnRKpH9') || powerInp.closest('.MUUhtVW6OxD9dYFURbyO') || powerInp.parentElement;
+                const powerCont  = powerInp.closest('.zC3boZPYpGZ1oTnRKpH9') || powerInp.closest('.MUUhtVW6OxD9dYFURbyO') || powerInp.parentElement;
                 const powerMinus = powerCont ? powerCont.querySelector('button.bfwPpp5XjJbr4xH4oW1r') : null;
                 const powerPlus  = powerCont ? powerCont.querySelector('button.tKCNx3Mjilgu1eJFpBSs') : null;
                 const getVal = () => parseInt(powerInp.value) || 0;
@@ -284,19 +358,13 @@
             await sleep(150);
             await fillField(`input[name="additionalLoad.info[${loadIndex}].streetLampLuminaireDirection"]`, lamp.direction, `Направление[${loadIndex}]`);
             await sleep(150);
-            // Фото лампы — 2 фото: общее + крупным планом
             await clickCameraN(`fieldset[name="additionalLoad.info[${loadIndex}].streetLampPhotoUrls"]`, 2);
             await sleep(150);
-            // Фото кронштейна
             await clickCamera(`fieldset[name="additionalLoad.info[${loadIndex}].streetLampMountPhotoUrls"] button.smwb-fab`);
         } else if (type === 'светильник') {
-            // Светильник: только фото нагрузки + фото кронштейна
             await clickCamera(`fieldset[name="additionalLoad.info[${loadIndex}].lampBracketPhotoUrls"] button.smwb-fab`);
         } else if (type === 'муфта ВОЛС') {
-            // Реальное имя поля: fiberOpticSpliceClosureOwner
             await fillField(`input[name="additionalLoad.info[${loadIndex}].fiberOpticSpliceClosureOwner"]`, 'Н/Д', `Владелец муфты[${loadIndex}]`);
-        } else if (type === 'линии разных классов напряжения') {
-            // Только тип + фото, доп. полей нет
         }
         await sleep(150);
         await clickCamera(`fieldset[name="additionalLoad.info[${loadIndex}].photoUrls"] button.smwb-fab`);
@@ -320,6 +388,64 @@
         siteCount = counter.count();
         if (siteCount !== N) return;
         for (let i = 0; i < N; i++) { await fillLoad(i, desired[i]); await sleep(200); }
+    }
+
+    /******************************************************************
+     * АБОНЕНТЫ
+     ******************************************************************/
+    async function syncSubscribers() {
+        if (!db.subscribers.settlement && !db.subscribers.street) {
+            log('Абоненты: поля пусты, пропущено', 'debug');
+            return;
+        }
+        const countInp = document.querySelector('input[name="subscribers.count"]');
+        if (!countInp) {
+            log('Абоненты: форма не найдена', 'debug');
+            return;
+        }
+        const total = parseInt(countInp.value) || 0;
+        if (total === 0) {
+            log('Абоненты: количество = 0', 'debug');
+            return;
+        }
+
+        log(`\n=== АБОНЕНТЫ (${total}) ===`, 'info');
+
+        for (let i = 0; i < total; i++) {
+            log(`Абонент ${i + 1}/${total}`, 'info');
+
+            const moved = await goToSubscriberSlide(i);
+            if (!moved) log(`  ⚠️ Не удалось перейти к слайду ${i}`, 'warning');
+            await sleep(400);
+
+            // Ждём появления полей в DOM (React рендерит слайды лениво)
+            for (let retry = 0; retry < 10; retry++) {
+                const s = document.querySelector(`input[name="subscribers.info[${i}].settlement"]`);
+                const r = document.querySelector(`input[name="subscribers.info[${i}].street"]`);
+                if (s && r) break;
+                await sleep(300);
+            }
+
+            if (db.subscribers.settlement) {
+                const ok = await fillField(
+                    `input[name="subscribers.info[${i}].settlement"]`,
+                    db.subscribers.settlement,
+                    `Нас. пункт[${i}]`
+                );
+                log(`  Населенный пункт: ${ok ? '✅' : '❌'} "${db.subscribers.settlement}"`, ok ? 'success' : 'warning');
+                await sleep(150);
+            }
+
+            if (db.subscribers.street) {
+                const ok = await fillField(
+                    `input[name="subscribers.info[${i}].street"]`,
+                    db.subscribers.street,
+                    `Улица[${i}]`
+                );
+                log(`  Улица: ${ok ? '✅' : '❌'} "${db.subscribers.street}"`, ok ? 'success' : 'warning');
+                await sleep(150);
+            }
+        }
     }
 
     /******************************************************************
@@ -349,7 +475,6 @@
             if (sc) { const v = parseInt(sc.value)||0; if (db.stands.count !== v) { db.stands.count = v; changed = true; } }
             const bc = document.querySelector('input[name="bracing.count"]');
             if (bc) { const v = parseInt(bc.value)||0; if (db.bracing.count !== v) { db.bracing.count = v; changed = true; } }
-            // Материал укоса — берём с первого слайда укосов
             const bm = document.querySelector('input[name="bracing.info[0].material"]') ||
                        document.querySelector('input[name="bracing.material"]');
             if (bm?.value && db.bracing.material !== bm.value) { db.bracing.material = bm.value; changed = true; }
@@ -395,7 +520,7 @@
     }
 
     /******************************************************************
-     * UI (SHADOW DOM) — в стиле KOLUS
+     * UI (SHADOW DOM)
      ******************************************************************/
     const host = document.createElement('div');
     host.id = 'pillar-ui-host';
@@ -410,7 +535,6 @@
 
     .root { position: fixed; width: 340px; background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%); border-radius: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; z-index: 1000000; box-shadow: 0 20px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1); color: #fff; overflow: hidden; animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); transform-origin: top left; display: flex; flex-direction: column; max-height: 90vh; }
 
-    /* ── Шапка ── */
     .header { background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); padding: 8px 12px; cursor: move; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); user-select: none; flex-shrink: 0; }
     .header-title { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px; letter-spacing: 0.3px; }
     .header-icon { width: 18px; height: 18px; background: linear-gradient(135deg, #8b5cf6 0%, #ec4899 100%); border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 11px; }
@@ -418,30 +542,25 @@
     .header-btn { width: 24px; height: 24px; border-radius: 5px; background: rgba(255,255,255,0.1); border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 14px; line-height: 1; }
     .header-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
 
-    /* ── Свёрнутая инфо-строка ── */
     .collapsed-info { padding: 8px 12px; display: none; flex-direction: column; gap: 6px; background: rgba(0,0,0,0.2); }
     .collapsed-info.visible { display: flex; }
     .collapsed-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
     .collapsed-label { color: rgba(255,255,255,0.6); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; font-size: 9px; }
     .collapsed-value { font-weight: 700; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.3); color: #a78bfa; }
 
-    /* ── Тело ── */
     .body { padding: 10px 12px; padding-bottom: 70px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1; }
     .body::-webkit-scrollbar { width: 5px; }
     .body::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 3px; }
     .body::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.5); border-radius: 3px; }
     .body::-webkit-scrollbar-thumb:hover { background: rgba(139,92,246,0.7); }
 
-    /* ── Статус-панель ── */
     .status-panel { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
     .status-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
     .status-label { color: rgba(255,255,255,0.6); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; font-size: 9px; }
     .status-value { font-weight: 700; font-size: 11px; padding: 3px 8px; border-radius: 5px; background: rgba(0,0,0,0.3); color: #a78bfa; }
 
-    /* ── Разделитель ── */
     .divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent); margin: 2px 0; }
 
-    /* ── Поля ── */
     .field-group { display: flex; flex-direction: column; gap: 4px; }
     .field-label { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 0.3px; }
     .field-label-icon { font-size: 12px; }
@@ -451,17 +570,14 @@
     .field-select:focus { border-color: rgba(139,92,246,0.6); box-shadow: 0 0 0 2px rgba(139,92,246,0.1); }
     .field-select option { background: #1e1b4b; }
 
-    /* ── Счётчик ── */
     .number-control { display: flex; align-items: center; gap: 6px; }
     .number-btn { width: 26px; height: 26px; border-radius: 6px; border: none; background: rgba(139,92,246,0.2); color: #8b5cf6; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; transition: all 0.2s; flex-shrink: 0; }
     .number-btn:hover { background: rgba(139,92,246,0.35); transform: scale(1.05); }
     .number-display { flex: 1; text-align: center; font-size: 14px; font-weight: 700; color: #a78bfa; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); padding: 5px 8px; border-radius: 7px; }
 
-    /* ── Компактная строка ── */
     .compact-row { display: flex; gap: 6px; }
     .compact-row .field-group { flex: 1; }
 
-    /* ── Нагрузки (плитки) ── */
     .load-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
     .load-tile { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; padding: 8px 10px; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; gap: 4px; user-select: none; }
     .load-tile:hover { background: rgba(0,0,0,0.4); border-color: rgba(139,92,246,0.4); }
@@ -474,7 +590,6 @@
     .load-tile.active .load-tile-name { color: rgba(167,139,250,0.9); }
     .load-hint { font-size: 9px; color: rgba(255,255,255,0.35); text-align: center; margin-top: 2px; }
 
-    /* ── Подвал с кнопками ── */
     .footer { position: absolute; bottom: 0; left: 0; right: 0; padding: 10px 12px; background: linear-gradient(180deg, transparent, rgba(0,0,0,0.4)); display: flex; gap: 6px; backdrop-filter: blur(10px); border-top: 1px solid rgba(255,255,255,0.1); }
     .btn { flex: 1; padding: 9px 16px; border: none; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; font-family: inherit; }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -483,13 +598,11 @@
     .btn-scan { background: linear-gradient(135deg, rgba(34,197,94,0.2), rgba(34,197,94,0.3)); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
     .btn-scan:hover:not(:disabled) { background: linear-gradient(135deg, rgba(34,197,94,0.3), rgba(34,197,94,0.4)); transform: translateY(-1px); }
 
-    /* ── Масштаб ── */
     .scale-controls { display: flex; align-items: center; gap: 4px; }
     .scale-btn { width: 20px; height: 20px; border-radius: 4px; border: none; background: rgba(255,255,255,0.1); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; transition: all 0.2s; }
     .scale-btn:hover { background: rgba(255,255,255,0.2); transform: scale(1.05); }
     .scale-value { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.8); min-width: 32px; text-align: center; }
 
-    /* ── Логи ── */
     .log-panel { position: fixed; bottom: 20px; right: 20px; width: 420px; max-height: 320px; background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%); border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.1); z-index: 999999; display: flex; flex-direction: column; overflow: hidden; }
     .log-panel.hidden { display: none; }
     .log-header { background: rgba(0,0,0,0.3); padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; }
@@ -502,12 +615,10 @@
     .log-content::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.5); border-radius: 2px; }
     .log-entry { font-size: 10px; font-family: 'Menlo', 'Consolas', monospace; margin-bottom: 3px; line-height: 1.5; }
 
-    /* ── Уведомления ── */
     .notification { position: fixed; top: 20px; right: 20px; background: linear-gradient(135deg, rgba(34,197,94,0.95), rgba(0,0,0,0.95)); border: 1px solid rgba(34,197,94,0.5); border-radius: 10px; padding: 12px 16px; color: #fff; font-size: 12px; font-weight: 600; z-index: 1000002; box-shadow: 0 8px 24px rgba(0,0,0,0.5); animation: slideIn 0.3s ease-out; max-width: 280px; }
     .notification-warning { background: linear-gradient(135deg, rgba(234,179,8,0.95), rgba(0,0,0,0.95)); border-color: rgba(234,179,8,0.5); }
     .notification-error   { background: linear-gradient(135deg, rgba(239,68,68,0.95), rgba(0,0,0,0.95)); border-color: rgba(239,68,68,0.5); }
 
-    /* ── Модалки ── */
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); align-items: center; justify-content: center; z-index: 1000001; }
     .modal-overlay.show { display: flex; }
     .modal { background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%); border-radius: 12px; padding: 20px; width: 90%; max-width: 340px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); max-height: 80vh; overflow-y: auto; }
@@ -522,7 +633,6 @@
     .modal-btn-secondary { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); }
     .modal-btn-secondary:hover { background: rgba(255,255,255,0.15); }
 
-    /* ── Карточка фонаря ── */
     .lamp-card { background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
     .lamp-card-title { font-size: 11px; font-weight: 700; color: #a78bfa; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.08); }
     .radio-group { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -532,7 +642,6 @@
     .radio-label:hover { background: rgba(0,0,0,0.4); border-color: rgba(139,92,246,0.4); }
     .radio-input:checked + .radio-label { background: rgba(139,92,246,0.2); border-color: rgba(139,92,246,0.6); color: #a78bfa; font-weight: 600; }
 
-    /* ── Discord ── */
     .discord-link { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 6px 10px; background: rgba(88,101,242,0.2); border: 1px solid rgba(88,101,242,0.3); border-radius: 7px; color: #5865f2; font-size: 10px; font-weight: 600; text-decoration: none; transition: all 0.2s; margin-top: 4px; }
     .discord-link:hover { background: rgba(88,101,242,0.3); transform: translateY(-1px); }
     `;
@@ -542,7 +651,7 @@
         <div class="header" id="dragHandle">
             <div class="header-title">
                 <div class="header-icon">🏗️</div>
-                <span>Опоры v1.8.1</span>
+                <span>Опоры v1.8.3</span>
             </div>
             <div class="header-controls">
                 <div class="scale-controls">
@@ -567,8 +676,6 @@
         </div>
 
         <div class="body" id="bodyContent">
-
-            <!-- Статус -->
             <div class="status-panel">
                 <div class="status-row">
                     <span class="status-label">🏗️ Марка опоры</span>
@@ -582,7 +689,6 @@
 
             <div class="divider"></div>
 
-            <!-- Опора -->
             <div class="field-group">
                 <label class="field-label"><span class="field-label-icon">🏗️</span>Марка опоры</label>
                 <select class="field-select" id="selPillarType"></select>
@@ -601,7 +707,6 @@
 
             <div class="divider"></div>
 
-            <!-- Укосы -->
             <div class="compact-row">
                 <div class="field-group">
                     <label class="field-label"><span class="field-label-icon">🔧</span>Укосы</label>
@@ -619,7 +724,6 @@
 
             <div class="divider"></div>
 
-            <!-- Нагрузки -->
             <div class="field-group">
                 <label class="field-label"><span class="field-label-icon">⚡</span>Нагрузки</label>
                 <div class="load-hint">ЛКМ — добавить · ПКМ — убрать</div>
@@ -671,6 +775,20 @@
 
             <div class="divider"></div>
 
+            <div class="field-group">
+                <label class="field-label"><span class="field-label-icon">👤</span>Абоненты (автозаполнение)</label>
+            </div>
+            <div class="field-group">
+                <label class="field-label">Населенный пункт</label>
+                <input type="text" class="field-input" id="inpSettlement" placeholder="Например: Опалиха">
+            </div>
+            <div class="field-group">
+                <label class="field-label">Улица</label>
+                <input type="text" class="field-input" id="inpStreet" placeholder="Например: Куйбышева пер.">
+            </div>
+
+            <div class="divider"></div>
+
             <a href="#" class="discord-link" id="discordLink">
                 <span>💬</span><span>Discord: KAST Team</span>
             </a>
@@ -686,7 +804,6 @@
         </div>
     </div>
 
-    <!-- Лог -->
     <div class="log-panel hidden" id="logPanel">
         <div class="log-header">
             <div class="log-title">📋 Журнал</div>
@@ -701,7 +818,6 @@
         </div>
     </div>
 
-    <!-- Модалка: приставки (дерево) -->
     <div class="modal-overlay" id="modalAttach">
         <div class="modal">
             <div class="modal-title">🪵 Приставки</div>
@@ -726,7 +842,6 @@
         </div>
     </div>
 
-    <!-- Модалка: фонари -->
     <div class="modal-overlay" id="modalLamps">
         <div class="modal">
             <div class="modal-title">💡 Настройка фонарей</div>
@@ -789,6 +904,8 @@
         lampsConfig:    shadow.querySelector('#lampsConfig'),
         btnConfLamps:   shadow.querySelector('#btnConfirmLamps'),
         btnCancLamps:   shadow.querySelector('#btnCancelLamps'),
+        inpSettlement:  shadow.querySelector('#inpSettlement'),
+        inpStreet:      shadow.querySelector('#inpStreet'),
         discordLink:    shadow.querySelector('#discordLink'),
         logPanel:       shadow.querySelector('#logPanel'),
         logContent:     shadow.querySelector('#logContent'),
@@ -828,7 +945,6 @@
     shadow.querySelector('#btnCopyLogs').addEventListener('click', copyLogs);
     shadow.querySelector('#btnClearLogs').addEventListener('click', () => clearLogs());
     shadow.querySelector('#btnCloseLogs').addEventListener('click', () => ui.logPanel.classList.add('hidden'));
-
     ui.btnTogLogs.addEventListener('click', () => {
         ui.logPanel.classList.toggle('hidden');
         ui.btnTogLogs.style.background = ui.logPanel.classList.contains('hidden') ? 'rgba(255,255,255,0.1)' : 'rgba(139,92,246,0.4)';
@@ -869,6 +985,9 @@
         ui.selPlacement.value   = db.pillar.placement;
         ui.dispBracing.textContent = db.bracing.count;
         ui.selBracingMat.value  = db.bracing.material;
+
+        ui.inpSettlement.value = db.subscribers.settlement;
+        ui.inpStreet.value     = db.subscribers.street;
 
         ui.statusPillar.textContent    = db.pillar.type;
         ui.statusConstruct.textContent = db.pillar.constructionType;
@@ -920,7 +1039,9 @@
     ui.btnBrDown.addEventListener('click', () => { if (db.bracing.count > 0) { db.bracing.count--; saveDb(); updateUI(); } });
     ui.selBracingMat.addEventListener('change', e => { db.bracing.material = e.target.value; saveDb(); });
 
-    // Нагрузки — ЛКМ / ПКМ
+    ui.inpSettlement.addEventListener('input', e => { db.subscribers.settlement = e.target.value; saveDb(); });
+    ui.inpStreet.addEventListener('input',     e => { db.subscribers.street = e.target.value; saveDb(); });
+
     [
         { el: ui.loadCabinet,       key: 'communicationCabinet' },
         { el: ui.loadCommLine,      key: 'communicationLine' },
@@ -946,18 +1067,15 @@
         });
     });
 
-    // Приставки (модалка)
     ui.btnAtUp.addEventListener('click',   () => { db.attachments.count++; ui.dispAttach.textContent = db.attachments.count; saveDb(); });
     ui.btnAtDown.addEventListener('click', () => { if (db.attachments.count > 0) { db.attachments.count--; ui.dispAttach.textContent = db.attachments.count; saveDb(); } });
     ui.selAttachMat.addEventListener('change', e => { db.attachments.material = e.target.value; saveDb(); });
     ui.btnCancAtch.addEventListener('click',  () => ui.modalAttach.classList.remove('show'));
     ui.btnConfAtch.addEventListener('click',  () => { ui.modalAttach.classList.remove('show'); afterAttachments(); });
 
-    // Фонари (модалка)
     ui.btnCancLamps.addEventListener('click', () => ui.modalLamps.classList.remove('show'));
     ui.btnConfLamps.addEventListener('click', () => { ui.modalLamps.classList.remove('show'); startFill(); });
 
-    // Закрытие модалок кликом за их пределами
     [ui.modalAttach, ui.modalLamps].forEach(m =>
         m.addEventListener('click', e => { if (e.target === m) m.classList.remove('show'); })
     );
@@ -1015,7 +1133,7 @@
     }
 
     /******************************************************************
-     * СКАНИРОВАНИЕ САЙТА
+     * СКАНИРОВАНИЕ
      ******************************************************************/
     ui.btnScan.addEventListener('click', async () => {
         ui.btnScan.disabled = true;
@@ -1061,10 +1179,9 @@
         showNotification('⏳ Заполнение...', 'warning');
         try {
             log('═'.repeat(45), 'info');
-            log('v1.8.1 — Заполнение опоры', 'info');
+            log('v1.8.3 — Заполнение опоры', 'info');
             log('═'.repeat(45), 'info');
 
-            // Марка опоры
             if (db.pillar.type) {
                 const cur = document.querySelector('fieldset[name="pillarType"] .smwb-select-field__values');
                 if (!cur || cur.textContent.trim() !== db.pillar.type)
@@ -1084,7 +1201,6 @@
                 await fillField('input[name="woodTemporaryType"]', 'без обработки', 'Консервация');
             await sleep(150);
 
-            // Стойки
             log(`\n=== СТОЙКИ (${db.stands.count}) ===`, 'info');
             if (await setCounter('input[name="stand.count"]', db.stands.count) && db.stands.count > 0) {
                 await sleep(600);
@@ -1098,7 +1214,6 @@
                 }
             }
 
-            // Укосы
             if (db.bracing.count > 0) {
                 log(`\n=== УКОСЫ (${db.bracing.count}) ===`, 'info');
                 if (await setCounter('input[name="bracing.count"]', db.bracing.count)) {
@@ -1114,7 +1229,6 @@
                 }
             }
 
-            // Приставки
             if (db.pillar.material === 'деревянная' && db.attachments.count > 0) {
                 log(`\n=== ПРИСТАВКИ (${db.attachments.count}) ===`, 'info');
                 if (await setCounter('input[name="attachment.count"]', db.attachments.count)) {
@@ -1130,8 +1244,8 @@
                 }
             }
 
-            // Нагрузки
             await syncLoads();
+            await syncSubscribers();
 
             log('\n✅ ЗАПОЛНЕНИЕ ЗАВЕРШЕНО', 'success');
             showNotification('✅ Форма заполнена!', 'success');
@@ -1180,7 +1294,7 @@
     });
 
     /******************************************************************
-     * НАБЛЮДАТЕЛЬ ЗА ФОРМОЙ (авто show/hide)
+     * НАБЛЮДАТЕЛЬ ЗА ФОРМОЙ
      ******************************************************************/
     function isPillarForm() {
         return !!(
@@ -1202,7 +1316,7 @@
     }
 
     /******************************************************************
-     * ГОРЯЧАЯ КЛАВИША ALT+О — показать/скрыть
+     * ГОРЯЧАЯ КЛАВИША ALT+О
      ******************************************************************/
     window.pillarManuallyHidden = false;
     document.addEventListener('keydown', e => {
@@ -1235,6 +1349,6 @@
     startDetection();
     startFormObserver();
 
-    console.log('✅ Автозаполнение опор v1.8.1 готов! | Created by KAST Team');
+    console.log('✅ Автозаполнение опор v1.8.3 готов! | Created by KAST Team');
     console.log('💡 Горячая клавиша: ALT+О — показать/скрыть UI');
 })();
