@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Автозаполнение опор - v1.8.3 (KOLUS Style)
+// @name         Автозаполнение опор - v1.8.4 (KOLUS Style)
 // @namespace    pillar.autofill.advanced
-// @version      1.8.3
+// @version      1.8.4
 // @description  🏗️ Заполнение формы опор в стиле KOLUS | Created by KAST Team
 // @match        https://moe2.agentumit.ru/*
 // @grant        none
@@ -10,7 +10,7 @@
 (function() {
     'use strict';
 
-    console.log('🚀 Автозаполнение опор v1.8.3 загружен | Created by KAST Team');
+    console.log('🚀 Автозаполнение опор v1.8.4 загружен | Created by KAST Team');
 
     const STORAGE_KEY = 'pillar_autofill_v1';
 
@@ -29,7 +29,9 @@
     const PLACEMENT_TYPES = ['Ответвительная', 'Промежуточная', 'Угловая', 'Концевая'];
     const BRACING_MATS    = ['деревянная', 'металлическая', 'железобетонная'];
     const ATTACH_MATS     = ['железобетонная', 'деревянная'];
-    const LAMP_TYPES      = ['ДНАТ', 'ДРЛ', 'Светодиод', 'Ввод вручную'];
+    const LAMP_TYPES         = ['ДНАТ', 'ДРЛ', 'Светодиод', 'Ввод вручную'];
+    const INSULATOR_TYPES    = ['поддерживающий', 'натяжной', 'штыревой', 'угловой'];
+    const INSULATOR_MATS     = ['фарфоровый', 'стеклянный', 'полимерный'];
 
     const defaultData = {
         pillar: { type: 'СВ 95', constructionType: 'одностоечная', placement: 'Промежуточная', material: 'железобетонная' },
@@ -39,6 +41,8 @@
         additionalLoad: { communicationCabinet: 0, communicationLine: 0, streetLamp: 0, volsMuffle: 0, streetLantern: 0, voltageLines: 0 },
         subscribers: { settlement: '', street: '' },
         lamps: [],
+        insulators: { count: 1, type: 'поддерживающий', material: 'фарфоровый', qty: 6 },
+        wireTypeA: false,
         ui: { pos: { x: 20, y: 20 }, isCollapsed: false, scale: 100 }
     };
 
@@ -50,6 +54,8 @@
         db.attachments.material = 'железобетонная';
     }
     if (!db.subscribers) db.subscribers = { settlement: '', street: '' };
+    if (!db.insulators) db.insulators = { count: 1, type: 'поддерживающий', material: 'фарфоровый', qty: 6 };
+    if (db.wireTypeA === undefined) db.wireTypeA = false;
     const saveDb = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 
     /******************************************************************
@@ -391,6 +397,230 @@
     }
 
     /******************************************************************
+     * ИЗОЛЯТОРЫ
+     ******************************************************************/
+    async function syncInsulators() {
+        const ins = db.insulators;
+        if (!ins || ins.count < 1) return;
+
+        log(`\n=== ИЗОЛЯТОРЫ (групп: ${ins.count}, шт.: ${ins.qty}) ===`, 'info');
+
+        // Выставляем количество групп
+        if (!await setCounter('input[name="insulator.count"]', ins.count)) {
+            log('  ❌ Не удалось выставить количество групп', 'error');
+            return;
+        }
+        await sleep(600);
+
+        for (let i = 0; i < ins.count; i++) {
+            log(`  Изолятор ${i + 1}/${ins.count}`, 'info');
+
+            // Найти карусель изоляторов и переключить слайд
+            const insCard = (() => {
+                const inp = document.querySelector('input[name="insulator.count"]');
+                if (!inp) return null;
+                const card = inp.closest('.smwb-card');
+                return card ? card.querySelector('.smwb-carousel') : null;
+            })();
+
+            if (insCard) {
+                const getDots    = () => insCard.querySelectorAll('.smwb-carousel__navigation__dot');
+                const getCurrent = () => { const d = getDots(); for (let k=0;k<d.length;k++) if (d[k].classList.contains('current')) return k; return 0; };
+                for (let attempt = 0; attempt < 5 && getCurrent() !== i; attempt++) {
+                    const diff = i - getCurrent();
+                    const btn  = diff > 0
+                        ? insCard.querySelector('.smwb-carousel__arrow_next')
+                        : insCard.querySelector('.smwb-carousel__arrow_prev');
+                    if (btn) { for (let c=0;c<Math.abs(diff);c++) { btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); await sleep(350); } }
+                    if (getCurrent() === i) break;
+                    const dots = getDots();
+                    if (i < dots.length) { (dots[i].querySelector('button')||dots[i]).dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); await sleep(500); }
+                    await sleep(300);
+                }
+            }
+
+            // Ждём появления полей
+            for (let r=0;r<10;r++) {
+                if (document.querySelector(`input[name="insulator.info[${i}].type"]`)) break;
+                await sleep(300);
+            }
+
+            await fillField(`input[name="insulator.info[${i}].type"]`,     ins.type,     `Тип изолятора[${i}]`);
+            await sleep(150);
+            await fillField(`input[name="insulator.info[${i}].material"]`, ins.material, `Материал изолятора[${i}]`);
+            await sleep(150);
+
+            // Количество штук в группе
+            await setCounter(`input[name="insulator.info[${i}].count"]`, ins.qty);
+            await sleep(200);
+
+            // Фидер — выбираем первый вариант только если ещё не выбран
+            const fiderFieldset = document.querySelector(`fieldset[name="insulator.info[${i}].fider"]`);
+            if (fiderFieldset) {
+                const fiderSelect = fiderFieldset.querySelector('.smwb-select-field');
+                const currentVal  = fiderFieldset.querySelector('.smwb-select-field__values');
+                const alreadySet  = currentVal && currentVal.textContent.trim() !== '';
+                if (!alreadySet && fiderSelect) {
+                    ['mousedown','mouseup','click'].forEach(t =>
+                        fiderSelect.dispatchEvent(new MouseEvent(t,{bubbles:true,cancelable:true,view:window}))
+                    );
+                    await sleep(400);
+                    const firstItem = document.querySelector('.smwb-menu__item');
+                    if (firstItem) {
+                        ['mousedown','mouseup','click'].forEach(t =>
+                            firstItem.dispatchEvent(new MouseEvent(t,{bubbles:true,cancelable:true,view:window}))
+                        );
+                        await sleep(200);
+                        log(`  Фидер: выбран первый вариант`, 'success');
+                    } else {
+                        log(`  Фидер: варианты не найдены`, 'warning');
+                    }
+                } else if (alreadySet) {
+                    log(`  Фидер: уже выбран "${currentVal.textContent.trim()}", пропущено`, 'debug');
+                }
+            }
+            await sleep(150);
+
+            // Фото
+            await clickCamera(`fieldset[name="insulator.info[${i}].photoUrls"] button.smwb-fab`);
+            await sleep(150);
+        }
+
+        log('  ✅ Изоляторы заполнены', 'success');
+    }
+
+    /******************************************************************
+     * АБОНЕНТЫ — вспомогательные функции
+     ******************************************************************/
+
+    /******************************************************************
+     * СИСТЕМА ПОСТОЯННОЙ ПОДСВЕТКИ ОШИБОК
+     ******************************************************************/
+    // Хранит CSS-селекторы полей с ошибками
+    const errorSelectors = new Set();
+
+    const ERROR_STYLE = `
+        outline: 3px solid #ef4444 !important;
+        outline-offset: 3px !important;
+        border-radius: 8px !important;
+        background: rgba(239,68,68,0.15) !important;
+        box-shadow: 0 0 0 5px rgba(239,68,68,0.2), 0 0 16px rgba(239,68,68,0.35) !important;
+    `;
+
+    function applyErrorStyle(el) {
+        if (!el) return;
+        const holder = el.closest('.smwb-text-field') || el.closest('fieldset') || el.parentElement;
+        if (!holder) return;
+        holder.setAttribute('data-pillar-error', '1');
+        holder.style.cssText += ERROR_STYLE;
+    }
+
+    // Перебирает все зарегистрированные селекторы и подсвечивает найденные элементы
+    function reapplyErrors() {
+        for (const sel of errorSelectors) {
+            const el = document.querySelector(sel);
+            if (el) {
+                const holder = el.closest('.smwb-text-field') || el.closest('fieldset') || el.parentElement;
+                // Если holder уже имеет атрибут — уже подсвечен, не трогаем
+                if (holder && !holder.hasAttribute('data-pillar-error')) {
+                    applyErrorStyle(el);
+                }
+            }
+        }
+    }
+
+    // Следим за изменениями DOM и переприменяем стили — это обеспечивает
+    // восстановление подсветки после ре-рендера React (при листании карусели)
+    const errorPersistObserver = new MutationObserver(() => {
+        if (errorSelectors.size === 0) return;
+        reapplyErrors();
+        // Снимаем подсветку если форма закрылась
+        if (!document.querySelector('fieldset[name="pillarType"]') && !document.querySelector('input[name="stand.count"]')) {
+            errorSelectors.clear();
+        }
+    });
+    errorPersistObserver.observe(document.body, { childList: true, subtree: true });
+
+    // Зарегистрировать поле как ошибочное и сразу подсветить
+    function highlightFieldError(el, selector) {
+        if (!el) return;
+        if (selector) errorSelectors.add(selector);
+        applyErrorStyle(el);
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Сбросить все ошибки (вызывается при новом запуске заполнения)
+    function clearAllErrors() {
+        errorSelectors.clear();
+        document.querySelectorAll('[data-pillar-error]').forEach(el => {
+            el.removeAttribute('data-pillar-error');
+            el.style.outline = '';
+            el.style.outlineOffset = '';
+            el.style.borderRadius = '';
+            el.style.background = '';
+            el.style.boxShadow = '';
+        });
+    }
+
+    // Выбрать первый вариант в smwb-select если значение пустое
+    async function selectFirstIfEmpty(fieldsetSelector) {
+        const fs = document.querySelector(fieldsetSelector);
+        if (!fs) return false;
+        const valEl  = fs.querySelector('.smwb-select-field__values');
+        const selEl  = fs.querySelector('.smwb-select-field');
+        const alreadySet = valEl && valEl.textContent.trim() !== '';
+        if (alreadySet) return true; // уже выбрано — не трогаем
+        if (!selEl) return false;
+        ['mousedown','mouseup','click'].forEach(t =>
+            selEl.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))
+        );
+        await sleep(400);
+        const firstItem = document.querySelector('.smwb-menu__item');
+        if (firstItem) {
+            ['mousedown','mouseup','click'].forEach(t =>
+                firstItem.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }))
+            );
+            await sleep(200);
+            return true;
+        }
+        return false;
+    }
+
+    // Получить значение провода у абонента (поддерживает input и select)
+    function getSubscriberCable(i) {
+        const inp   = document.querySelector(`input[name="subscribers.info[${i}].cableType"]`);
+        const selEl = document.querySelector(`fieldset[name="subscribers.info[${i}].cableType"] .smwb-select-field__values`);
+        return (inp ? inp.value : (selEl ? selEl.textContent : '')).trim();
+    }
+
+    // Проверить провод по фазе
+    // Фаза A/B/C → СИП 2х16, АВВГ 2х16, А-16
+    // Фаза ABC   → СИП 4хY, АВВГ 4хY, А-Y  где Y > 16
+    function validateCableForPhase(cable, phase) {
+        if (!cable) return false;
+        const singlePhase = /^(A|B|C)$/i.test(phase);
+        const threePhase  = /^ABC$/i.test(phase);
+
+        if (singlePhase) {
+            if (/^СИП 2х16$/i.test(cable))  return true;
+            if (/^АВВГ 2х16$/i.test(cable)) return true;
+            if (/^А-16$/.test(cable))        return true;
+            return false;
+        }
+        if (threePhase) {
+            let m;
+            m = cable.match(/^СИП 4х(\d+)$/i);
+            if (m && parseInt(m[1]) > 16) return true;
+            m = cable.match(/^АВВГ 4х(\d+)$/i);
+            if (m && parseInt(m[1]) > 16) return true;
+            m = cable.match(/^А-(\d+)$/);
+            if (m && parseInt(m[1]) > 16) return true;
+            return false;
+        }
+        return true; // неизвестная фаза — не блокируем
+    }
+
+    /******************************************************************
      * АБОНЕНТЫ
      ******************************************************************/
     async function syncSubscribers() {
@@ -426,6 +656,7 @@
                 await sleep(300);
             }
 
+            // ── Населенный пункт / Улица ──────────────────────────────
             if (db.subscribers.settlement) {
                 const ok = await fillField(
                     `input[name="subscribers.info[${i}].settlement"]`,
@@ -445,6 +676,71 @@
                 log(`  Улица: ${ok ? '✅' : '❌'} "${db.subscribers.street}"`, ok ? 'success' : 'warning');
                 await sleep(150);
             }
+
+            // ── ТП — выбрать первый если пустой ──────────────────────
+            const tpOk = await selectFirstIfEmpty(`fieldset[name="subscribers.info[${i}].substation"]`);
+            const tpVal = (document.querySelector(`fieldset[name="subscribers.info[${i}].substation"] .smwb-select-field__values`) || {}).textContent?.trim() || '';
+            if (!tpVal) {
+                log(`  ТП: ❌ не выбрано`, 'warning');
+                const tpSel = `fieldset[name="subscribers.info[${i}].substation"] .smwb-select-field`;
+                highlightFieldError(document.querySelector(tpSel), tpSel);
+            } else {
+                log(`  ТП: ✅ "${tpVal}"`, 'success');
+            }
+            await sleep(150);
+
+            // ── Фидер — выбрать первый если пустой ───────────────────
+            const fiderOk = await selectFirstIfEmpty(`fieldset[name="subscribers.info[${i}].fider"]`);
+            const fiderVal = (document.querySelector(`fieldset[name="subscribers.info[${i}].fider"] .smwb-select-field__values`) || {}).textContent?.trim() || '';
+            if (!fiderVal) {
+                log(`  Фидер: ❌ не выбран`, 'warning');
+                const fiderSel = `fieldset[name="subscribers.info[${i}].fider"] .smwb-select-field`;
+                highlightFieldError(document.querySelector(fiderSel), fiderSel);
+            } else {
+                log(`  Фидер: ✅ "${fiderVal}"`, 'success');
+            }
+            await sleep(150);
+
+            // ── Способ крепления — всегда Натяжное ───────────────────
+            await fillField(`input[name="subscribers.info[${i}].fastening.type"]`, 'Натяжное', `Крепление[${i}]`);
+            await sleep(150);
+
+            // ── Валидация провода по фазе ─────────────────────────────
+            const phaseInp = document.querySelector(`input[name="subscribers.info[${i}].phasesType"]`);
+            const phase = phaseInp ? phaseInp.value.trim() : '';
+            const cable = getSubscriberCable(i);
+
+            const cableValid = validateCableForPhase(cable, phase);
+            if (!cableValid || !cable) {
+                const singlePhase = /^(A|B|C)$/i.test(phase);
+                const threePhase  = /^ABC$/i.test(phase);
+                const hint = singlePhase
+                    ? 'Ожидается: СИП 2х16 / АВВГ 2х16 / А-16'
+                    : threePhase
+                        ? 'Ожидается: СИП 4хY / АВВГ 4хY / А-Y (Y > 16)'
+                        : `Фаза: "${phase}" — неизвестная`;
+                log(`  Провод: ❌ "${cable || 'пусто'}" (фаза "${phase}") — ${hint}`, 'warning');
+                // Подсветить поле провода красным и перенести фокус на него
+                const cableInpEl = document.querySelector(`input[name="subscribers.info[${i}].cableType"]`)
+                                || document.querySelector(`fieldset[name="subscribers.info[${i}].cableType"] .smwb-select-field`);
+                const cableSel = document.querySelector(`input[name="subscribers.info[${i}].cableType"]`)
+                    ? `input[name="subscribers.info[${i}].cableType"]`
+                    : `fieldset[name="subscribers.info[${i}].cableType"] .smwb-select-field`;
+                highlightFieldError(cableInpEl, cableSel);
+                // Небольшая пауза чтобы скролл успел отработать, затем фокус
+                await sleep(400);
+                if (cableInpEl) cableInpEl.focus();
+            } else {
+                log(`  Провод: ✅ "${cable}" (фаза "${phase}")`, 'success');
+            }
+
+            // ── Натяжение провода — заполняем ПОСЛЕ фокуса на проводе ─
+            await sleep(150);
+            const isTypeA = /^(А|АС)-\d+$/i.test(cable);
+            const wireTension = isTypeA ? 'Вязка концевая' : 'Зажим натяжной клиновой';
+            await fillField(`input[name="subscribers.info[${i}].wireTension"]`, wireTension, `Натяжение[${i}]`);
+            log(`  Натяжение: "${wireTension}"`, 'debug');
+            await sleep(150);
         }
     }
 
@@ -644,6 +940,18 @@
 
     .discord-link { display: flex; align-items: center; justify-content: center; gap: 5px; padding: 6px 10px; background: rgba(88,101,242,0.2); border: 1px solid rgba(88,101,242,0.3); border-radius: 7px; color: #5865f2; font-size: 10px; font-weight: 600; text-decoration: none; transition: all 0.2s; margin-top: 4px; }
     .discord-link:hover { background: rgba(88,101,242,0.3); transform: translateY(-1px); }
+
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; cursor: pointer; user-select: none; transition: all 0.2s; }
+    .toggle-row:hover { background: rgba(0,0,0,0.35); border-color: rgba(139,92,246,0.35); }
+    .toggle-row.active { background: rgba(139,92,246,0.12); border-color: rgba(139,92,246,0.45); }
+    .toggle-row-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.85); display: flex; align-items: center; gap: 6px; }
+    .toggle-pill { width: 34px; height: 18px; border-radius: 9px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); position: relative; transition: all 0.25s; flex-shrink: 0; }
+    .toggle-pill.on { background: rgba(139,92,246,0.6); border-color: rgba(139,92,246,0.8); }
+    .toggle-thumb { width: 12px; height: 12px; border-radius: 50%; background: #fff; position: absolute; top: 2px; left: 2px; transition: all 0.25s; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+    .toggle-pill.on .toggle-thumb { left: 18px; }
+
+    .insulator-section { display: flex; flex-direction: column; gap: 8px; }
+    .insulator-section.hidden { display: none; }
     `;
 
     const html = `
@@ -651,7 +959,7 @@
         <div class="header" id="dragHandle">
             <div class="header-title">
                 <div class="header-icon">🏗️</div>
-                <span>Опоры v1.8.3</span>
+                <span>Опоры v1.8.4</span>
             </div>
             <div class="header-controls">
                 <div class="scale-controls">
@@ -789,6 +1097,45 @@
 
             <div class="divider"></div>
 
+            <div class="toggle-row" id="toggleWireTypeA">
+                <span class="toggle-row-label"><span>🔩</span> Провод типа "А"</span>
+                <div class="toggle-pill" id="pillWireTypeA"><div class="toggle-thumb"></div></div>
+            </div>
+
+            <div class="insulator-section hidden" id="insulatorSection">
+                <div class="field-group">
+                    <label class="field-label"><span class="field-label-icon">🔩</span>Изоляторы</label>
+                </div>
+                <div class="compact-row">
+                    <div class="field-group">
+                        <label class="field-label">Тип</label>
+                        <select class="field-select" id="selInsulatorType"></select>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Материал</label>
+                        <select class="field-select" id="selInsulatorMat"></select>
+                    </div>
+                </div>
+                <div class="compact-row">
+                    <div class="field-group">
+                        <label class="field-label">Групп</label>
+                        <div class="number-control">
+                            <button class="number-btn" id="btnInsCountDown">−</button>
+                            <div class="number-display" id="dispInsCount">1</div>
+                            <button class="number-btn" id="btnInsCountUp">+</button>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <label class="field-label">Кол-во в группе</label>
+                        <div class="number-control">
+                            <button class="number-btn" id="btnInsQtyDown">−</button>
+                            <div class="number-display" id="dispInsQty">6</div>
+                            <button class="number-btn" id="btnInsQtyUp">+</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <a href="#" class="discord-link" id="discordLink">
                 <span>💬</span><span>Discord: KAST Team</span>
             </a>
@@ -909,6 +1256,17 @@
         discordLink:    shadow.querySelector('#discordLink'),
         logPanel:       shadow.querySelector('#logPanel'),
         logContent:     shadow.querySelector('#logContent'),
+        selInsulatorType:  shadow.querySelector('#selInsulatorType'),
+        selInsulatorMat:   shadow.querySelector('#selInsulatorMat'),
+        dispInsCount:      shadow.querySelector('#dispInsCount'),
+        btnInsCountUp:     shadow.querySelector('#btnInsCountUp'),
+        btnInsCountDown:   shadow.querySelector('#btnInsCountDown'),
+        dispInsQty:        shadow.querySelector('#dispInsQty'),
+        btnInsQtyUp:       shadow.querySelector('#btnInsQtyUp'),
+        btnInsQtyDown:     shadow.querySelector('#btnInsQtyDown'),
+        toggleWireTypeA:   shadow.querySelector('#toggleWireTypeA'),
+        pillWireTypeA:     shadow.querySelector('#pillWireTypeA'),
+        insulatorSection:  shadow.querySelector('#insulatorSection'),
     };
 
     /******************************************************************
@@ -974,6 +1332,8 @@
         fill(ui.selPlacement,  PLACEMENT_TYPES);
         fill(ui.selBracingMat, BRACING_MATS);
         fill(ui.selAttachMat,  ATTACH_MATS);
+        fill(ui.selInsulatorType, INSULATOR_TYPES);
+        fill(ui.selInsulatorMat,  INSULATOR_MATS);
     }
 
     /******************************************************************
@@ -988,6 +1348,15 @@
 
         ui.inpSettlement.value = db.subscribers.settlement;
         ui.inpStreet.value     = db.subscribers.street;
+
+        ui.selInsulatorType.value  = db.insulators.type;
+        ui.selInsulatorMat.value   = db.insulators.material;
+        ui.dispInsCount.textContent = db.insulators.count;
+        ui.dispInsQty.textContent   = db.insulators.qty;
+
+        ui.pillWireTypeA.classList.toggle('on', db.wireTypeA);
+        ui.toggleWireTypeA.classList.toggle('active', db.wireTypeA);
+        ui.insulatorSection.classList.toggle('hidden', !db.wireTypeA);
 
         ui.statusPillar.textContent    = db.pillar.type;
         ui.statusConstruct.textContent = db.pillar.constructionType;
@@ -1041,6 +1410,21 @@
 
     ui.inpSettlement.addEventListener('input', e => { db.subscribers.settlement = e.target.value; saveDb(); });
     ui.inpStreet.addEventListener('input',     e => { db.subscribers.street = e.target.value; saveDb(); });
+
+    ui.selInsulatorType.addEventListener('change', e => { db.insulators.type = e.target.value; saveDb(); });
+    ui.selInsulatorMat.addEventListener('change',  e => { db.insulators.material = e.target.value; saveDb(); });
+    ui.btnInsCountUp.addEventListener('click',   () => { db.insulators.count++; ui.dispInsCount.textContent = db.insulators.count; saveDb(); });
+    ui.btnInsCountDown.addEventListener('click', () => { if (db.insulators.count > 1) { db.insulators.count--; ui.dispInsCount.textContent = db.insulators.count; saveDb(); } });
+    ui.btnInsQtyUp.addEventListener('click',   () => { db.insulators.qty++; ui.dispInsQty.textContent = db.insulators.qty; saveDb(); });
+    ui.btnInsQtyDown.addEventListener('click', () => { if (db.insulators.qty > 1) { db.insulators.qty--; ui.dispInsQty.textContent = db.insulators.qty; saveDb(); } });
+
+    ui.toggleWireTypeA.addEventListener('click', () => {
+        db.wireTypeA = !db.wireTypeA;
+        saveDb();
+        ui.pillWireTypeA.classList.toggle('on', db.wireTypeA);
+        ui.toggleWireTypeA.classList.toggle('active', db.wireTypeA);
+        ui.insulatorSection.classList.toggle('hidden', !db.wireTypeA);
+    });
 
     [
         { el: ui.loadCabinet,       key: 'communicationCabinet' },
@@ -1154,6 +1538,7 @@
      ******************************************************************/
     ui.btnFill.addEventListener('click', async () => {
         clearLogs();
+        clearAllErrors();
         log('🚀 Запуск заполнения опоры...', 'info');
         if (db.pillar.material === 'деревянная') {
             ui.dispAttach.textContent = db.attachments.count;
@@ -1179,7 +1564,7 @@
         showNotification('⏳ Заполнение...', 'warning');
         try {
             log('═'.repeat(45), 'info');
-            log('v1.8.3 — Заполнение опоры', 'info');
+            log('v1.8.4 — Заполнение опоры', 'info');
             log('═'.repeat(45), 'info');
 
             if (db.pillar.type) {
@@ -1245,6 +1630,7 @@
             }
 
             await syncLoads();
+            if (db.wireTypeA) await syncInsulators();
             await syncSubscribers();
 
             log('\n✅ ЗАПОЛНЕНИЕ ЗАВЕРШЕНО', 'success');
@@ -1349,6 +1735,7 @@
     startDetection();
     startFormObserver();
 
-    console.log('✅ Автозаполнение опор v1.8.3 готов! | Created by KAST Team');
+    console.log('✅ Автозаполнение опор v1.8.4 готов! | Created by KAST Team');
     console.log('💡 Горячая клавиша: ALT+О — показать/скрыть UI');
 })();
+
