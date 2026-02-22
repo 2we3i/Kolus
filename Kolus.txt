@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KOLUS - Умный помощник заполнения форм
 // @namespace    kolus.ultimate
-// @version      1.6.1
+// @version      1.6.2
 // @description  Интеллектуальный помощник заполнения форм с автодополнением и умным сканированием | Created by KAST Team
 // @match        https://moe2.agentumit.ru/*
 // @grant        none
@@ -10,7 +10,7 @@
 (function() {
     'use strict';
 
-    console.log('🚀 KOLUS v1.6.1 загружен | Created by KAST Team');
+    console.log('🚀 KOLUS v1.6.2 загружен | Created by KAST Team');
 
     const STORAGE_KEY = 'kolus_ultimate_v1';
 
@@ -85,6 +85,106 @@
     const getActive = () => db.presets.find(p => p.id === db.activeId) || db.presets[0];
 
     /******************************************************************
+     * 📡 ПЕРЕХВАТ КЛИКОВ ПО ПРОВОДУ — АВТОЗАПОЛНЕНИЕ ДЛИНЫ
+     ******************************************************************/
+    var lastClickTime = 0;
+    var CLICK_WINDOW_MS = 1000;
+
+    document.addEventListener('click', function () {
+        lastClickTime = Date.now();
+    }, true);
+
+    function calcLengthFromCoords(locations) {
+        if (!Array.isArray(locations) || locations.length < 2) return null;
+        var toRad = function(d) { return d * Math.PI / 180; };
+        var total = 0;
+        for (var i = 0; i < locations.length - 1; i++) {
+            var lat1 = locations[i].latitude,   lon1 = locations[i].longitude;
+            var lat2 = locations[i+1].latitude, lon2 = locations[i+1].longitude;
+            if (lat1 == null || lat2 == null) return null;
+            var dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2)
+                + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2))
+                * Math.sin(dLon/2) * Math.sin(dLon/2);
+            total += 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+        return total.toFixed(2);
+    }
+
+    // Колбэк — устанавливается из initializeUI, чтобы обновить поле в UI
+    window.kolusSetWireLength = null;
+
+    function applyWireLength(lengthStr) {
+        // Записываем в базу
+        db.wireLength = lengthStr;
+        saveDb();
+        // Если UI уже готов — обновляем поле напрямую
+        if (typeof window.kolusSetWireLength === 'function') {
+            window.kolusSetWireLength(lengthStr);
+        }
+        console.log('[KOLUS] 📏 Длина из клика: ' + lengthStr + ' м');
+    }
+
+    function handleClickJson(data, url) {
+        if (!data || typeof data !== 'object') return;
+        if (Array.isArray(data)) {
+            data.forEach(function(item) { handleClickJson(item, url); });
+            return;
+        }
+        if (data.subtype !== 'create-line') return;
+        var len = calcLengthFromCoords(data.location);
+        if (len !== null) applyWireLength(len);
+    }
+
+    // Перехват XHR
+    var OrigXHR = window.XMLHttpRequest;
+    function PatchedXHR() {
+        var xhr = new OrigXHR();
+        var _url = '';
+        var _clickTime = 0;
+        var origOpen = xhr.open.bind(xhr);
+        xhr.open = function(method, url) {
+            _url = url;
+            return origOpen.apply(this, arguments);
+        };
+        var origSend = xhr.send.bind(xhr);
+        xhr.send = function() {
+            _clickTime = lastClickTime;
+            return origSend.apply(this, arguments);
+        };
+        xhr.addEventListener('load', function() {
+            if (_clickTime === 0 || (Date.now() - _clickTime) > CLICK_WINDOW_MS) return;
+            try {
+                var ct = xhr.getResponseHeader('content-type') || '';
+                if (ct.indexOf('application/json') === -1) return;
+                var data = JSON.parse(xhr.responseText);
+                handleClickJson(data, _url);
+            } catch(e) {}
+        });
+        return xhr;
+    }
+    PatchedXHR.prototype = OrigXHR.prototype;
+    window.XMLHttpRequest = PatchedXHR;
+
+    // Перехват fetch
+    var _fetch = window.fetch;
+    window.fetch = function() {
+        var args = Array.prototype.slice.call(arguments);
+        var url = (typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '') || '';
+        var clickTime = lastClickTime;
+        var promise = _fetch.apply(this, args);
+        promise.then(function(response) {
+            if (clickTime === 0 || (Date.now() - clickTime) > CLICK_WINDOW_MS) return;
+            var ct = response.headers.get('content-type') || '';
+            if (ct.indexOf('application/json') === -1) return;
+            response.clone().json().then(function(data) { handleClickJson(data, url); }).catch(function(){});
+        }).catch(function(){});
+        return promise;
+    };
+
+    console.log('[KOLUS] 📡 Перехватчик кликов по проводу активен ✅');
+
+    /******************************************************************
      * ПРОВЕРКА ТИПА ФОРМЫ
      ******************************************************************/
     function isWireForm() {
@@ -122,9 +222,7 @@
         if (!wire1 || !wire2) return false;
         const n1 = wire1.toLowerCase().replace(/\s+/g, '').replace(/[-_]/g, '');
         const n2 = wire2.toLowerCase().replace(/\s+/g, '').replace(/[-_]/g, '');
-        if (wire1 == '') {
-            return true;
-        }
+        if (wire1 == '') { return true; }
         return n1 === n2;
     }
 
@@ -241,7 +339,13 @@
             const host = document.getElementById('kolus-ui-host');
             if (!host) return;
             if (formVisible && !window.kolusManuallyHidden) {
+                const wasHidden = host.style.display === 'none';
                 host.style.display = 'block';
+                // Если форма только что открылась — синхронизируем длину из db
+                // (могли кликнуть по проводу до того как форма была открыта)
+                if (wasHidden && typeof window.kolusSetWireLength === 'function' && db.wireLength) {
+                    window.kolusSetWireLength(db.wireLength);
+                }
             } else {
                 host.style.display = 'none';
             }
@@ -267,6 +371,7 @@
         const css = `
         @keyframes slideIn { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        @keyframes lengthPop { 0% { transform: scale(1); } 50% { transform: scale(1.08); background: rgba(34,197,94,0.4); } 100% { transform: scale(1); } }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         .root { position: fixed; width: 340px; background: linear-gradient(145deg, #1e1b4b 0%, #312e81 100%); border-radius: 12px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; z-index: 1000000; box-shadow: 0 20px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1); color: #fff; overflow: hidden; animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); transform-origin: top left; display: flex; flex-direction: column; max-height: 90vh; }
         .header { background: rgba(0,0,0,0.3); backdrop-filter: blur(10px); padding: 8px 12px; cursor: move; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); user-select: none; flex-shrink: 0; }
@@ -303,6 +408,7 @@
         .field-input::placeholder { color: rgba(255,255,255,0.4); }
         .field-input:focus { border-color: rgba(139,92,246,0.6); background: rgba(0,0,0,0.4); box-shadow: 0 0 0 2px rgba(139,92,246,0.1); }
         .field-input:disabled { opacity: 0.5; cursor: not-allowed; }
+        .field-input.length-updated { animation: lengthPop 0.5s ease-out; border-color: rgba(34,197,94,0.6); }
         .preset-controls { display: flex; gap: 5px; }
         .preset-controls .field-input { flex: 1; }
         .preset-btn { width: 30px; height: 30px; border-radius: 6px; border: none; background: rgba(139,92,246,0.2); color: #8b5cf6; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: all 0.2s; flex-shrink: 0; }
@@ -404,7 +510,7 @@
             <div class="header" id="dragHandle">
                 <div class="header-title">
                     <div class="header-icon">⚡</div>
-                    <span>KOLUS v1.6.1</span>
+                    <span>KOLUS v1.6.2</span>
                 </div>
                 <div class="header-controls">
                     <div class="scale-controls">
@@ -425,6 +531,10 @@
                 <div class="collapsed-row">
                     <span class="collapsed-label">🎯 Пресет</span>
                     <span class="collapsed-value" id="collapsedPreset" style="color:#8b5cf6;">—</span>
+                </div>
+                <div class="collapsed-row">
+                    <span class="collapsed-label">📏 Длина</span>
+                    <span class="collapsed-value" id="collapsedLength" style="color:#22c55e;">—</span>
                 </div>
             </div>
 
@@ -484,7 +594,7 @@
 
                 <div class="field-group">
                     <label class="field-label"><span class="field-label-icon">📐</span>Длина (м)</label>
-                    <input type="number" min="0" step="0.1" class="field-input" id="inputWireLength" placeholder="Длина провода...">
+                    <input type="number" min="0" step="0.1" class="field-input" id="inputWireLength" placeholder="Нажмите на провод...">
                 </div>
 
                 <div class="field-group">
@@ -711,6 +821,7 @@
             statusPreset: shadow.querySelector('#statusPreset'),
             collapsedWire: shadow.querySelector('#collapsedWire'),
             collapsedPreset: shadow.querySelector('#collapsedPreset'),
+            collapsedLength: shadow.querySelector('#collapsedLength'),
             collapsedInfo: shadow.querySelector('#collapsedInfo'),
             presetSelect: shadow.querySelector('#presetSelect'),
             btnAddPreset: shadow.querySelector('#btnAddPreset'),
@@ -752,6 +863,22 @@
             inputCouplingCount: shadow.querySelector('#inputCouplingCount'),
             btnCouplingMinus: shadow.querySelector('#btnCouplingMinus'),
             btnCouplingPlus: shadow.querySelector('#btnCouplingPlus')
+        };
+
+        /******************************************************************
+         * 📏 КОЛБЭК ДЛЯ АВТОУСТАНОВКИ ДЛИНЫ ПРИ КЛИКЕ ПО ПРОВОДУ
+         ******************************************************************/
+        window.kolusSetWireLength = function(lengthStr) {
+            ui.inputWireLength.value = lengthStr;
+            // Обновляем в свёрнутом виде
+            if (ui.collapsedLength) ui.collapsedLength.textContent = lengthStr + ' м';
+            // Анимация — подсветка поля
+            ui.inputWireLength.classList.remove('length-updated');
+            void ui.inputWireLength.offsetWidth; // reflow для перезапуска анимации
+            ui.inputWireLength.classList.add('length-updated');
+            setTimeout(() => ui.inputWireLength.classList.remove('length-updated'), 600);
+            // Уведомление
+            showNotification('📏 Длина: ' + lengthStr + ' м', 'success');
         };
 
         /******************************************************************
@@ -945,6 +1072,7 @@
             ui.inputWireLength.value = db.wireLength || '';
             ui.inputWireBrand.value  = preset.wireBrand || '';
             ui.inputTerrain.value    = preset.terrain || '';
+            if (ui.collapsedLength) ui.collapsedLength.textContent = db.wireLength ? db.wireLength + ' м' : '—';
             updateClearanceDisplay();
             updateCouplingDisplay();
 
@@ -957,10 +1085,10 @@
             (preset.roadType === 'Грунтовая' ? ui.roadGround : ui.roadAsphalt).checked = true;
 
             const co = db.crossingObject || 'Дерево';
-            if (co === 'Дерево')    ui.crossTree.checked     = true;
-            if (co === 'Забор')     ui.crossFence.checked    = true;
-            if (co === 'Автодорога')    ui.crossRoad.checked     = true;
-            if (co === 'Строение')  ui.crossBuilding.checked = true;
+            if (co === 'Дерево')     ui.crossTree.checked     = true;
+            if (co === 'Забор')      ui.crossFence.checked    = true;
+            if (co === 'Автодорога') ui.crossRoad.checked     = true;
+            if (co === 'Строение')   ui.crossBuilding.checked = true;
 
             ui.presetSelect.innerHTML = db.presets.map(p =>
                 `<option value="${p.id}" ${p.id === db.activeId ? 'selected' : ''}>${p.name}</option>`
@@ -1310,7 +1438,7 @@
         updateUI();
         monitorWire();
 
-        console.log('✅ KOLUS v1.6.1 готов! | Created by KAST Team');
+        console.log('✅ KOLUS v1.6.2 готов! | Created by KAST Team');
         document.getElementById('kolus-ui-host').style.display = db.isVisible ? 'block' : 'none';
     }
 
@@ -1347,7 +1475,7 @@
         if (e.altKey && e.key.toLowerCase() === 'з') { e.preventDefault(); toggleUI(); }
     });
 
-    console.log('🚀 KOLUS v1.6.1 загружается...');
+    console.log('🚀 KOLUS v1.6.2 загружается...');
     console.log('💡 Горячая клавиша: ALT + З - показать/скрыть UI');
 
     window.kolusManuallyHidden = false;
