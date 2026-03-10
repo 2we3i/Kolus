@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         KOLUS - Умный помощник заполнения форм
 // @namespace    kolus.ultimate
-// @version      1.6.2
-// @description  Интеллектуальный помощник заполнения форм с автодополнением и умным сканированием | Created by KAST Team
+// @version      1.6.3
+// @description  Интеллектуальный помощник заполнения форм с автодополнением, умным сканированием и заметками | Created by KAST Team
 // @match        https://moe2.agentumit.ru/*
 // @grant        none
 // ==/UserScript==
@@ -10,7 +10,7 @@
 (function() {
     'use strict';
 
-    console.log('🚀 KOLUS v1.6.2 загружен | Created by KAST Team');
+    console.log('🚀 KOLUS v1.6.3 загружен | Created by KAST Team');
 
     const STORAGE_KEY = 'kolus_ultimate_v1';
 
@@ -44,6 +44,7 @@
         fastening: 'Натяжное',
         crossingObject: 'Дерево',
         couplingCount: '0',
+        notes: '',
         presets: [
             { id: 'p1', name: '⚡ СИП Натяжка',  wireBrand: 'СИП 4х50', roadType: 'Асфальтовая', construction: 'ВЛ', terrain: 'населенная местность', designation: 'магистраль' },
             { id: 'p2', name: '🔧 СИП Поддержка', wireBrand: 'СИП 4х50', roadType: 'Асфальтовая', construction: 'ВЛ', terrain: 'населенная местность', designation: 'магистраль' },
@@ -69,6 +70,7 @@
     }
     if (db.clearance === undefined) db.clearance = '5.0';
     if (db.couplingCount === undefined) db.couplingCount = '0';
+    if (db.notes === undefined) db.notes = '';
     if (db.presets && db.presets.length > 0) {
         db.presets = db.presets.map(p => {
             if (Array.isArray(p.fastenings)) delete p.fastenings;
@@ -111,14 +113,11 @@
         return total.toFixed(2);
     }
 
-    // Колбэк — устанавливается из initializeUI, чтобы обновить поле в UI
     window.kolusSetWireLength = null;
 
     function applyWireLength(lengthStr) {
-        // Записываем в базу
         db.wireLength = lengthStr;
         saveDb();
-        // Если UI уже готов — обновляем поле напрямую
         if (typeof window.kolusSetWireLength === 'function') {
             window.kolusSetWireLength(lengthStr);
         }
@@ -136,7 +135,6 @@
         if (len !== null) applyWireLength(len);
     }
 
-    // Перехват XHR
     var OrigXHR = window.XMLHttpRequest;
     function PatchedXHR() {
         var xhr = new OrigXHR();
@@ -166,7 +164,6 @@
     PatchedXHR.prototype = OrigXHR.prototype;
     window.XMLHttpRequest = PatchedXHR;
 
-    // Перехват fetch
     var _fetch = window.fetch;
     window.fetch = function() {
         var args = Array.prototype.slice.call(arguments);
@@ -341,8 +338,6 @@
             if (formVisible && !window.kolusManuallyHidden) {
                 const wasHidden = host.style.display === 'none';
                 host.style.display = 'block';
-                // Если форма только что открылась — синхронизируем длину из db
-                // (могли кликнуть по проводу до того как форма была открыта)
                 if (wasHidden && typeof window.kolusSetWireLength === 'function' && db.wireLength) {
                     window.kolusSetWireLength(db.wireLength);
                 }
@@ -357,7 +352,7 @@
     }
 
     /******************************************************************
-     * UI (SHADOW DOM) - КОМПАКТНАЯ ВЕРСИЯ
+     * UI (SHADOW DOM)
      ******************************************************************/
     function initializeUI() {
         if (window.kolusUIInitialized) { console.log('⚠️ KOLUS: UI уже инициализирован'); return; }
@@ -501,6 +496,28 @@
         .settings-toggle-slider::before { content: ''; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: 0.3s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
         .settings-toggle-input:checked + .settings-toggle-slider { background: linear-gradient(135deg, #22c55e, #16a34a); }
         .settings-toggle-input:checked + .settings-toggle-slider::before { transform: translateX(18px); }
+
+        /* ===== ЗАМЕТКИ ===== */
+        .notes-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1000001; pointer-events: none; }
+        .notes-overlay.visible { display: block; }
+        .notes-panel { pointer-events: all; position: absolute; width: 300px; background: linear-gradient(145deg, #0f172a 0%, #1e1b4b 100%); border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.1); overflow: hidden; display: flex; flex-direction: column; animation: slideIn 0.25s cubic-bezier(0.16,1,0.3,1); }
+        .notes-header { background: rgba(0,0,0,0.5); padding: 8px 12px; cursor: move; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); user-select: none; }
+        .notes-title { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 700; color: #fff; letter-spacing: 0.3px; }
+        .notes-title-icon { background: linear-gradient(135deg, #f59e0b, #d97706); border-radius: 5px; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+        .notes-close { width: 22px; height: 22px; border-radius: 5px; background: rgba(255,255,255,0.1); border: none; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 13px; transition: all 0.2s; }
+        .notes-close:hover { background: rgba(239,68,68,0.4); }
+        .notes-body { padding: 10px; display: flex; flex-direction: column; gap: 0; flex: 1; }
+        .notes-textarea { background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 10px 12px; color: #f1f5f9; font-size: 12.5px; font-family: 'Consolas', 'Courier New', monospace; resize: none; outline: none; line-height: 1.65; min-height: 240px; transition: border-color 0.2s; width: 100%; }
+        .notes-textarea::placeholder { color: rgba(255,255,255,0.25); font-size: 11px; line-height: 1.7; }
+        .notes-textarea:focus { border-color: rgba(245,158,11,0.55); box-shadow: 0 0 0 2px rgba(245,158,11,0.08); }
+        .notes-textarea::-webkit-scrollbar { width: 4px; }
+        .notes-textarea::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 2px; }
+        .notes-textarea::-webkit-scrollbar-thumb { background: rgba(245,158,11,0.4); border-radius: 2px; }
+        .notes-footer { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 10px; border-top: 1px solid rgba(255,255,255,0.07); margin-top: 8px; }
+        .notes-counter { font-size: 9px; color: rgba(255,255,255,0.35); font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
+        .notes-clear { padding: 5px 10px; border: 1px solid rgba(239,68,68,0.3); border-radius: 6px; background: rgba(239,68,68,0.1); color: #ef4444; font-size: 10px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+        .notes-clear:hover { background: rgba(239,68,68,0.22); transform: translateY(-1px); }
+
         .root.compact { max-height: none; }
         .root.compact .body { max-height: none; overflow-y: visible; }
         `;
@@ -510,7 +527,7 @@
             <div class="header" id="dragHandle">
                 <div class="header-title">
                     <div class="header-icon">⚡</div>
-                    <span>KOLUS v1.6.2</span>
+                    <span>KOLUS v1.6.3</span>
                 </div>
                 <div class="header-controls">
                     <div class="scale-controls">
@@ -518,6 +535,7 @@
                         <span class="scale-value" id="scaleValue">100%</span>
                         <button class="scale-btn" id="btnScaleUp">+</button>
                     </div>
+                    <button class="header-btn" id="btnNotes" title="Заметки 📝">📝</button>
                     <button class="header-btn" id="btnSettings" title="Настройки">⚙️</button>
                     <button class="header-btn" id="btnMinimize">−</button>
                 </div>
@@ -712,6 +730,26 @@
             </div>
         </div>
 
+        <!-- ЗАМЕТКИ -->
+        <div class="notes-overlay" id="notesOverlay">
+            <div class="notes-panel" id="notesPanel">
+                <div class="notes-header" id="notesDragHandle">
+                    <div class="notes-title">
+                        <div class="notes-title-icon">📝</div>
+                        <span>Заметки по проводам</span>
+                    </div>
+                    <button class="notes-close" id="notesClose">✕</button>
+                </div>
+                <div class="notes-body">
+                    <textarea class="notes-textarea" id="notesTextarea" placeholder="Записывай всё нужное сюда:\n\nф 1000 (СИП 4х35)\nф 9   (СИП 4х35)\nф 3   (СИП 4х35)\nф 7   (АВВГ 4х35)\n\n→ Следующий: ВВГ 3х2.5, муфта, КЛ\n\nЛюбые заметки — сохраняются сами."></textarea>
+                </div>
+                <div class="notes-footer">
+                    <span class="notes-counter" id="notesCounter">0 символов</span>
+                    <button class="notes-clear" id="notesClear">🗑 Очистить</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Модалки -->
         <div class="modal-overlay" id="modalAddPreset">
             <div class="modal">
@@ -862,7 +900,15 @@
             toggleCompact: shadow.querySelector('#toggleCompact'),
             inputCouplingCount: shadow.querySelector('#inputCouplingCount'),
             btnCouplingMinus: shadow.querySelector('#btnCouplingMinus'),
-            btnCouplingPlus: shadow.querySelector('#btnCouplingPlus')
+            btnCouplingPlus: shadow.querySelector('#btnCouplingPlus'),
+            btnNotes: shadow.querySelector('#btnNotes'),
+            notesOverlay: shadow.querySelector('#notesOverlay'),
+            notesPanel: shadow.querySelector('#notesPanel'),
+            notesDragHandle: shadow.querySelector('#notesDragHandle'),
+            notesClose: shadow.querySelector('#notesClose'),
+            notesTextarea: shadow.querySelector('#notesTextarea'),
+            notesCounter: shadow.querySelector('#notesCounter'),
+            notesClear: shadow.querySelector('#notesClear')
         };
 
         /******************************************************************
@@ -870,14 +916,11 @@
          ******************************************************************/
         window.kolusSetWireLength = function(lengthStr) {
             ui.inputWireLength.value = lengthStr;
-            // Обновляем в свёрнутом виде
             if (ui.collapsedLength) ui.collapsedLength.textContent = lengthStr + ' м';
-            // Анимация — подсветка поля
             ui.inputWireLength.classList.remove('length-updated');
-            void ui.inputWireLength.offsetWidth; // reflow для перезапуска анимации
+            void ui.inputWireLength.offsetWidth;
             ui.inputWireLength.classList.add('length-updated');
             setTimeout(() => ui.inputWireLength.classList.remove('length-updated'), 600);
-            // Уведомление
             showNotification('📏 Длина: ' + lengthStr + ' м', 'success');
         };
 
@@ -1361,7 +1404,7 @@
         });
 
         /******************************************************************
-         * ПЕРЕТАСКИВАНИЕ
+         * ПЕРЕТАСКИВАНИЕ ОСНОВНОГО ОКНА
          ******************************************************************/
         let isDragging = false, offsetX, offsetY;
         shadow.querySelector('#dragHandle').addEventListener('mousedown', (e) => {
@@ -1369,9 +1412,83 @@
         });
         document.addEventListener('mousemove', (e) => {
             if (isDragging) { ui.main.style.left = (e.clientX - offsetX) + 'px'; ui.main.style.top = (e.clientY - offsetY) + 'px'; }
+            if (notesIsDragging) { ui.notesPanel.style.left = (e.clientX - notesOffX) + 'px'; ui.notesPanel.style.top = (e.clientY - notesOffY) + 'px'; }
         });
         document.addEventListener('mouseup', () => {
             if (isDragging) { isDragging = false; ui.main.style.cursor = ''; db.pos = { x: parseInt(ui.main.style.left), y: parseInt(ui.main.style.top) }; saveDb(); }
+            if (notesIsDragging) { notesIsDragging = false; ui.notesPanel.style.cursor = ''; }
+        });
+
+        /******************************************************************
+         * 📝 ЗАМЕТКИ
+         ******************************************************************/
+        function updateNotesCounter() {
+            const len = ui.notesTextarea.value.length;
+            ui.notesCounter.textContent = len > 0 ? len + ' симв.' : '0 символов';
+        }
+
+        // Загружаем сохранённые заметки
+        ui.notesTextarea.value = db.notes || '';
+        updateNotesCounter();
+
+        ui.notesTextarea.addEventListener('input', () => {
+            db.notes = ui.notesTextarea.value;
+            saveDb();
+            updateNotesCounter();
+        });
+
+        ui.notesClear.addEventListener('click', () => {
+            if (!ui.notesTextarea.value) return;
+            if (confirm('Очистить все заметки?')) {
+                ui.notesTextarea.value = '';
+                db.notes = '';
+                saveDb();
+                updateNotesCounter();
+                showNotification('🗑 Заметки очищены', 'warning');
+            }
+        });
+
+        ui.notesClose.addEventListener('click', () => {
+            ui.notesOverlay.classList.remove('visible');
+            ui.btnNotes.style.background = 'rgba(255,255,255,0.1)';
+        });
+
+        ui.btnNotes.addEventListener('click', () => {
+            const isVisible = ui.notesOverlay.classList.contains('visible');
+            ui.notesOverlay.classList.toggle('visible', !isVisible);
+            ui.btnNotes.style.background = !isVisible ? 'rgba(245,158,11,0.45)' : 'rgba(255,255,255,0.1)';
+            if (!isVisible) {
+                // Позиционируем панель рядом с основным окном
+                const mainRect = ui.main.getBoundingClientRect();
+                let nx = mainRect.right + 12;
+                let ny = mainRect.top;
+                if (nx + 300 > window.innerWidth) nx = mainRect.left - 312;
+                if (ny + 340 > window.innerHeight) ny = window.innerHeight - 350;
+                ui.notesPanel.style.left = Math.max(5, nx) + 'px';
+                ui.notesPanel.style.top  = Math.max(5, ny) + 'px';
+                setTimeout(() => ui.notesTextarea.focus(), 100);
+            }
+        });
+
+        // Перетаскивание панели заметок
+        let notesIsDragging = false, notesOffX, notesOffY;
+        ui.notesDragHandle.addEventListener('mousedown', (e) => {
+            notesIsDragging = true;
+            notesOffX = e.clientX - ui.notesPanel.offsetLeft;
+            notesOffY = e.clientY - ui.notesPanel.offsetTop;
+            ui.notesPanel.style.cursor = 'grabbing';
+            e.preventDefault();
+        });
+
+        // Закрытие заметок по Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                [ui.modalAddPreset, ui.modalEditPreset, ui.modalDeletePreset, ui.modalWireBinding, ui.modalAnchorType].forEach(hideModal);
+                if (ui.notesOverlay.classList.contains('visible')) {
+                    ui.notesOverlay.classList.remove('visible');
+                    ui.btnNotes.style.background = 'rgba(255,255,255,0.1)';
+                }
+            }
         });
 
         /******************************************************************
@@ -1438,7 +1555,7 @@
         updateUI();
         monitorWire();
 
-        console.log('✅ KOLUS v1.6.2 готов! | Created by KAST Team');
+        console.log('✅ KOLUS v1.6.3 готов! | Created by KAST Team');
         document.getElementById('kolus-ui-host').style.display = db.isVisible ? 'block' : 'none';
     }
 
@@ -1475,7 +1592,7 @@
         if (e.altKey && e.key.toLowerCase() === 'з') { e.preventDefault(); toggleUI(); }
     });
 
-    console.log('🚀 KOLUS v1.6.2 загружается...');
+    console.log('🚀 KOLUS v1.6.3 загружается...');
     console.log('💡 Горячая клавиша: ALT + З - показать/скрыть UI');
 
     window.kolusManuallyHidden = false;
